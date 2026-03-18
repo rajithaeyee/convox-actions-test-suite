@@ -2,8 +2,6 @@ name: "Test All Convox Actions"
 
 on:
   workflow_dispatch:
-  push:
-    branches: ["main", "test/*"]
 
 env:
   APP_PRIMARY: actions-test-primary
@@ -64,9 +62,10 @@ jobs:
           convox apps info --app ${{ env.APP_LIFECYCLE }} --rack ${{ secrets.CONVOX_RACK }}
           echo "App created successfully"
 
-  #  PHASE 3: BUILD
+  #  PHASE 3: BUILD + PROMOTE
+  #  Build creates a release, then we promote it so run/exec have a working image
   test-build:
-    name: "Build: Create Release"
+    name: "Build: Create Release + Promote"
     runs-on: ubuntu-latest
     needs: [test-login]
     outputs:
@@ -90,17 +89,24 @@ jobs:
         uses: convox/action-build@updates/tty-fix-and-cleanup
         with:
           rack: ${{ secrets.CONVOX_RACK }}
-          app: ${{ secrets.APP_PRIMARY }}
+          app: ${{ env.APP_PRIMARY }}
 
-      - name: Verify release was created
+      - name: Promote the release so run/exec have a working image
         run: |
-          echo "Release ID: ${{ steps.build.outputs.release }}"
-          convox releases info ${{ steps.build.outputs.release }} \
-            --app ${{ secrets.APP_PRIMARY }} \
-            --rack ${{ secrets.CONVOX_RACK }}
-          echo "Build created release ${{ steps.build.outputs.release }}"
+          echo "Promoting release ${{ steps.build.outputs.release }}..."
+          convox releases promote ${{ steps.build.outputs.release }} \
+            --app ${{ env.APP_PRIMARY }} \
+            --rack ${{ secrets.CONVOX_RACK }} \
+            --wait
+          echo "Release ${{ steps.build.outputs.release }} promoted"
+
+      - name: Verify release is active
+        run: |
+          convox releases -a ${{ env.APP_PRIMARY }} --rack ${{ secrets.CONVOX_RACK }} | head -5
+          echo "Build + promote complete"
 
   #  PHASE 4: RUN (Multiple sub-tests)
+  #  All run tests depend on test-build which now has a promoted release
 
   test-run-tty:
     name: "Run: TTY Output"
@@ -116,7 +122,7 @@ jobs:
         uses: convox/action-run@updates/tty-fix-and-cleanup
         with:
           rack: ${{ secrets.CONVOX_RACK }}
-          app: ${{ secrets.APP_PRIMARY }}
+          app: ${{ env.APP_PRIMARY }}
           service: web
           command: "node src/test-tty.js"
 
@@ -135,7 +141,7 @@ jobs:
         uses: convox/action-run@updates/tty-fix-and-cleanup
         with:
           rack: ${{ secrets.CONVOX_RACK }}
-          app: ${{ secrets.APP_PRIMARY }}
+          app: ${{ env.APP_PRIMARY }}
           service: web
           command: "node src/test-long-output.js"
 
@@ -153,7 +159,7 @@ jobs:
         uses: convox/action-run@updates/tty-fix-and-cleanup
         with:
           rack: ${{ secrets.CONVOX_RACK }}
-          app: ${{ secrets.APP_PRIMARY }}
+          app: ${{ env.APP_PRIMARY }}
           service: web
           command: "node src/test-exit-codes.js 0"
 
@@ -173,7 +179,7 @@ jobs:
         uses: convox/action-run@updates/tty-fix-and-cleanup
         with:
           rack: ${{ secrets.CONVOX_RACK }}
-          app: ${{ secrets.APP_PRIMARY }}
+          app: ${{ env.APP_PRIMARY }}
           service: web
           command: "node src/test-exit-codes.js 1"
 
@@ -201,7 +207,7 @@ jobs:
         uses: convox/action-run@updates/tty-fix-and-cleanup
         with:
           rack: ${{ secrets.CONVOX_RACK }}
-          app: ${{ secrets.APP_PRIMARY }}
+          app: ${{ env.APP_PRIMARY }}
           service: web
           command: "node src/test-exit-codes.js 42"
 
@@ -256,7 +262,7 @@ jobs:
         uses: convox/action-run@updates/tty-fix-and-cleanup
         with:
           rack: ${{ secrets.CONVOX_RACK }}
-          app: ${{ secrets.APP_PRIMARY }}
+          app: ${{ env.APP_PRIMARY }}
           command: "echo should not run"
 
       - name: Verify validation error
@@ -283,7 +289,7 @@ jobs:
         uses: convox/action-run@updates/tty-fix-and-cleanup
         with:
           rack: ${{ secrets.CONVOX_RACK }}
-          app: ${{ secrets.APP_PRIMARY }}
+          app: ${{ env.APP_PRIMARY }}
           service: web
 
       - name: Verify validation error
@@ -308,7 +314,7 @@ jobs:
         uses: convox/action-run@updates/tty-fix-and-cleanup
         with:
           rack: ${{ secrets.CONVOX_RACK }}
-          app: ${{ secrets.APP_PRIMARY }}
+          app: ${{ env.APP_PRIMARY }}
           service: web
           command: "node src/test-env.js"
           release: ${{ needs.test-build.outputs.release_id }}
@@ -327,7 +333,7 @@ jobs:
         uses: convox/action-run@updates/tty-fix-and-cleanup
         with:
           rack: ${{ secrets.CONVOX_RACK }}
-          app: ${{ secrets.APP_PRIMARY }}
+          app: ${{ env.APP_PRIMARY }}
           service: web
           command: "node src/migrate.js"
 
@@ -346,11 +352,11 @@ jobs:
         uses: convox/action-exec@updates/tty-fix-and-cleanup
         with:
           rack: ${{ secrets.CONVOX_RACK }}
-          app: ${{ secrets.APP_PRIMARY }}
+          app: ${{ env.APP_PRIMARY }}
           service: web
           command: "node src/test-env.js"
 
-  #  PHASE 6: DEPLOY
+  #  PHASE 6: DEPLOY (Build + Promote in one step)
   test-deploy:
     name: "Deploy: Build + Promote"
     runs-on: ubuntu-latest
@@ -373,13 +379,13 @@ jobs:
         uses: convox/action-deploy@updates/tty-fix-and-cleanup
         with:
           rack: ${{ secrets.CONVOX_RACK }}
-          app: ${{ secrets.APP_PRIMARY }}
+          app: ${{ env.APP_PRIMARY }}
           password: ${{ secrets.CONVOX_PASSWORD }}
           host: ${{ secrets.CONVOX_HOST }}
 
       - name: Verify deployment
         run: |
-          convox services --app ${{ secrets.APP_PRIMARY }} --rack ${{ secrets.CONVOX_RACK }}
+          convox services --app ${{ env.APP_PRIMARY }} --rack ${{ secrets.CONVOX_RACK }}
           echo "Deploy completed successfully"
 
   #  PHASE 7: EXPORT
@@ -397,7 +403,7 @@ jobs:
         uses: convox/action-export@updates/tty-fix-and-cleanup
         with:
           rack: ${{ secrets.CONVOX_RACK }}
-          app: ${{ secrets.APP_PRIMARY }}
+          app: ${{ env.APP_PRIMARY }}
 
   #  PHASE 8: DESTROY (only the lifecycle app)
   test-destroy:
@@ -515,7 +521,7 @@ jobs:
           #### action-build
           | Test | Status |
           |------|--------|
-          | Build Release | ${{ needs.test-build.result }} |
+          | Build + Promote | ${{ needs.test-build.result }} |
 
           #### action-run
           | Test | Status |
