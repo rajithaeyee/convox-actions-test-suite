@@ -1,0 +1,19 @@
+{
+  "name": "convox-actions-test-suite",
+  "version": "1.0.0",
+  "description": "End-to-end test suite for all Convox GitHub Actions feature branches",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "db:migrate": "node src/migrate.js",
+    "db:seed": "node src/seed.js",
+    "test:tty": "node src/test-tty.js",
+    "test:exit-codes": "node src/test-exit-codes.js",
+    "test:long-output": "node src/test-long-output.js",
+    "test:env": "node src/test-env.js",
+    "healthcheck": "node src/healthcheck.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2"
+  }
+}

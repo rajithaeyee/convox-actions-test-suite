@@ -1,0 +1,576 @@
+name: "Test All Convox Actions"
+
+on:
+  workflow_dispatch:
+    inputs:
+      branch_login:
+        description: "action-login branch (or 'v2' for stable)"
+        default: "v2"
+      branch_build:
+        description: "action-build branch (or 'v2' for stable)"
+        default: "v2"
+      branch_run:
+        description: "action-run branch (or 'v2' for stable)"
+        default: "v2"
+      branch_deploy:
+        description: "action-deploy branch (or 'v2' for stable)"
+        default: "v2"
+      branch_create:
+        description: "action-create branch (or 'v2' for stable)"
+        default: "v2"
+      branch_destroy:
+        description: "action-destroy branch (or 'v2' for stable)"
+        default: "v2"
+      branch_exec:
+        description: "action-exec branch (or 'v2' for stable)"
+        default: "v2"
+      branch_export:
+        description: "action-export branch (or 'v2' for stable)"
+        default: "v2"
+  push:
+    branches: ["main", "test/*"]
+
+#  Replace 'v2' with the actual branch name from each PR.
+env:
+  BRANCH_LOGIN:   ${{ github.event.inputs.branch_login   || 'v2' }}
+  BRANCH_BUILD:   ${{ github.event.inputs.branch_build   || 'v2' }}
+  BRANCH_RUN:     ${{ github.event.inputs.branch_run     || 'v2' }}
+  BRANCH_DEPLOY:  ${{ github.event.inputs.branch_deploy  || 'v2' }}
+  BRANCH_CREATE:  ${{ github.event.inputs.branch_create  || 'v2' }}
+  BRANCH_DESTROY: ${{ github.event.inputs.branch_destroy || 'v2' }}
+  BRANCH_EXEC:    ${{ github.event.inputs.branch_exec    || 'v2' }}
+  BRANCH_EXPORT:  ${{ github.event.inputs.branch_export  || 'v2' }}
+
+
+  APP_PRIMARY: actions-test-primary
+  APP_LIFECYCLE: actions-test-lifecycle
+
+jobs:
+  #  PHASE 1: LOGIN
+  test-login:
+    name: "Login: Authenticate"
+    runs-on: ubuntu-latest
+    steps:
+      - name: Login with feature branch
+        uses: convox/action-login@${{ env.BRANCH_LOGIN }}
+        with:
+          host: ${{ secrets.CONVOX_HOST }}
+          password: ${{ secrets.CONVOX_PASSWORD }}
+
+      - name: Verify CLI is authenticated
+        run: |
+          convox racks
+          echo "Login successful — CLI authenticated"
+  #  PHASE 2: Create APP
+  test-create:
+    name: "Create: New App"
+    runs-on: ubuntu-latest
+    needs: [test-login]
+    steps:
+      - uses: convox/action-login@${{ env.BRANCH_LOGIN }}
+        with:
+          host: ${{ secrets.CONVOX_HOST }}
+          password: ${{ secrets.CONVOX_PASSWORD }}
+
+      - name: Cleanup stale test app (if exists)
+        continue-on-error: true
+        run: convox apps delete ${{ env.APP_LIFECYCLE }} --rack ${{ secrets.CONVOX_RACK }} --wait
+
+      - name: Create app with feature branch
+        uses: convox/action-create@${{ env.BRANCH_CREATE }}
+        with:
+          rack: ${{ secrets.CONVOX_RACK }}
+          app: ${{ env.APP_LIFECYCLE }}
+
+      - name: Verify app exists
+        run: |
+          convox apps info --app ${{ env.APP_LIFECYCLE }} --rack ${{ secrets.CONVOX_RACK }}
+          echo "App created successfully"
+
+  #  PHASE 3: BUILD
+  test-build:
+    name: "Build: Create Release"
+    runs-on: ubuntu-latest
+    needs: [test-login]
+    outputs:
+      release_id: ${{ steps.build.outputs.release }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: convox/action-login@${{ env.BRANCH_LOGIN }}
+        with:
+          host: ${{ secrets.CONVOX_HOST }}
+          password: ${{ secrets.CONVOX_PASSWORD }}
+
+      - name: Build with feature branch
+        id: build
+        uses: convox/action-build@${{ env.BRANCH_BUILD }}
+        with:
+          rack: ${{ secrets.CONVOX_RACK }}
+          app: ${{ env.APP_PRIMARY }}
+
+      - name: Verify release was created
+        run: |
+          echo "Release ID: ${{ steps.build.outputs.release }}"
+          convox releases info ${{ steps.build.outputs.release }} \
+            --app ${{ env.APP_PRIMARY }} \
+            --rack ${{ secrets.CONVOX_RACK }}
+          echo "Build created release ${{ steps.build.outputs.release }}"
+
+  #  PHASE 4: RUN (Multiple sub-tests)
+  test-run-tty:
+    name: "Run: TTY Output"
+    runs-on: ubuntu-latest
+    needs: [test-build]
+    steps:
+      - uses: convox/action-login@${{ env.BRANCH_LOGIN }}
+        with:
+          host: ${{ secrets.CONVOX_HOST }}
+          password: ${{ secrets.CONVOX_PASSWORD }}
+
+      - name: Run TTY detection test
+        uses: convox/action-run@${{ env.BRANCH_RUN }}
+        with:
+          rack: ${{ secrets.CONVOX_RACK }}
+          app: ${{ env.APP_PRIMARY }}
+          service: web
+          command: "node src/test-tty.js"
+
+  test-run-no-hang:
+    name: "Run: No Hang (Long Output)"
+    runs-on: ubuntu-latest
+    needs: [test-build]
+    timeout-minutes: 5
+    steps:
+      - uses: convox/action-login@${{ env.BRANCH_LOGIN }}
+        with:
+          host: ${{ secrets.CONVOX_HOST }}
+          password: ${{ secrets.CONVOX_PASSWORD }}
+
+      - name: Run long output test (old action hangs here)
+        uses: convox/action-run@${{ env.BRANCH_RUN }}
+        with:
+          rack: ${{ secrets.CONVOX_RACK }}
+          app: ${{ env.APP_PRIMARY }}
+          service: web
+          command: "node src/test-long-output.js"
+
+  # --- 4c: Exit Code 0 (Success) ---
+  test-run-exit-success:
+    name: "Run: Exit Code 0"
+    runs-on: ubuntu-latest
+    needs: [test-build]
+    steps:
+      - uses: convox/action-login@${{ env.BRANCH_LOGIN }}
+        with:
+          host: ${{ secrets.CONVOX_HOST }}
+          password: ${{ secrets.CONVOX_PASSWORD }}
+
+      - name: Run command that succeeds
+        uses: convox/action-run@${{ env.BRANCH_RUN }}
+        with:
+          rack: ${{ secrets.CONVOX_RACK }}
+          app: ${{ env.APP_PRIMARY }}
+          service: web
+          command: "node src/test-exit-codes.js 0"
+
+  test-run-exit-failure:
+    name: "Run: Exit Code 1 Propagates"
+    runs-on: ubuntu-latest
+    needs: [test-build]
+    steps:
+      - uses: convox/action-login@${{ env.BRANCH_LOGIN }}
+        with:
+          host: ${{ secrets.CONVOX_HOST }}
+          password: ${{ secrets.CONVOX_PASSWORD }}
+
+      - name: Run command that fails (expect failure)
+        id: should_fail
+        continue-on-error: true
+        uses: convox/action-run@${{ env.BRANCH_RUN }}
+        with:
+          rack: ${{ secrets.CONVOX_RACK }}
+          app: ${{ env.APP_PRIMARY }}
+          service: web
+          command: "node src/test-exit-codes.js 1"
+
+      - name: Verify step actually failed
+        run: |
+          if [ "${{ steps.should_fail.outcome }}" != "failure" ]; then
+            echo "::error::Expected failure but got '${{ steps.should_fail.outcome }}'"
+            exit 1
+          fi
+          echo "Exit code 1 correctly propagated"
+
+  # --- 4e: Exit Code 42 (Custom) ---
+  test-run-exit-custom:
+    name: "Run: Exit Code 42 Propagates"
+    runs-on: ubuntu-latest
+    needs: [test-build]
+    steps:
+      - uses: convox/action-login@${{ env.BRANCH_LOGIN }}
+        with:
+          host: ${{ secrets.CONVOX_HOST }}
+          password: ${{ secrets.CONVOX_PASSWORD }}
+
+      - name: Run command that exits 42
+        id: should_fail_42
+        continue-on-error: true
+        uses: convox/action-run@${{ env.BRANCH_RUN }}
+        with:
+          rack: ${{ secrets.CONVOX_RACK }}
+          app: ${{ env.APP_PRIMARY }}
+          service: web
+          command: "node src/test-exit-codes.js 42"
+
+      - name: Verify failure
+        run: |
+          if [ "${{ steps.should_fail_42.outcome }}" != "failure" ]; then
+            echo "::error::Expected failure for exit code 42"
+            exit 1
+          fi
+          echo "Custom exit code 42 correctly propagated"
+
+  # --- 4f: Input Validation (Missing required inputs) ---
+  test-run-validation-no-app:
+    name: "Run: Validates Missing App"
+    runs-on: ubuntu-latest
+    needs: [test-build]
+    steps:
+      - uses: convox/action-login@${{ env.BRANCH_LOGIN }}
+        with:
+          host: ${{ secrets.CONVOX_HOST }}
+          password: ${{ secrets.CONVOX_PASSWORD }}
+
+      - name: Run without app (should fail fast)
+        id: no_app
+        continue-on-error: true
+        uses: convox/action-run@${{ env.BRANCH_RUN }}
+        with:
+          rack: ${{ secrets.CONVOX_RACK }}
+          service: web
+          command: "echo should not run"
+
+      - name: Verify validation error
+        run: |
+          if [ "${{ steps.no_app.outcome }}" != "failure" ]; then
+            echo "::error::Should have failed — missing 'app' input"
+            exit 1
+          fi
+          echo "Missing 'app' input correctly caught"
+
+  test-run-validation-no-service:
+    name: "Run: Validates Missing Service"
+    runs-on: ubuntu-latest
+    needs: [test-build]
+    steps:
+      - uses: convox/action-login@${{ env.BRANCH_LOGIN }}
+        with:
+          host: ${{ secrets.CONVOX_HOST }}
+          password: ${{ secrets.CONVOX_PASSWORD }}
+
+      - name: Run without service
+        id: no_svc
+        continue-on-error: true
+        uses: convox/action-run@${{ env.BRANCH_RUN }}
+        with:
+          rack: ${{ secrets.CONVOX_RACK }}
+          app: ${{ env.APP_PRIMARY }}
+          command: "echo should not run"
+
+      - name: Verify validation error
+        run: |
+          if [ "${{ steps.no_svc.outcome }}" != "failure" ]; then
+            echo "::error::Should have failed — missing 'service' input"
+            exit 1
+          fi
+          echo "Missing 'service' input correctly caught"
+
+  test-run-validation-no-command:
+    name: "Run: Validates Missing Command"
+    runs-on: ubuntu-latest
+    needs: [test-build]
+    steps:
+      - uses: convox/action-login@${{ env.BRANCH_LOGIN }}
+        with:
+          host: ${{ secrets.CONVOX_HOST }}
+          password: ${{ secrets.CONVOX_PASSWORD }}
+
+      - name: Run without command
+        id: no_cmd
+        continue-on-error: true
+        uses: convox/action-run@${{ env.BRANCH_RUN }}
+        with:
+          rack: ${{ secrets.CONVOX_RACK }}
+          app: ${{ env.APP_PRIMARY }}
+          service: web
+
+      - name: Verify validation error
+        run: |
+          if [ "${{ steps.no_cmd.outcome }}" != "failure" ]; then
+            echo "::error::Should have failed — missing 'command' input"
+            exit 1
+          fi
+          echo "Missing 'command' input correctly caught"
+
+  # --- 4g: Run with Specific Release ---
+  test-run-with-release:
+    name: "Run: With Specific Release"
+    runs-on: ubuntu-latest
+    needs: [test-build]
+    steps:
+      - uses: convox/action-login@${{ env.BRANCH_LOGIN }}
+        with:
+          host: ${{ secrets.CONVOX_HOST }}
+          password: ${{ secrets.CONVOX_PASSWORD }}
+
+      - name: Run with release from build step
+        uses: convox/action-run@${{ env.BRANCH_RUN }}
+        with:
+          rack: ${{ secrets.CONVOX_RACK }}
+          app: ${{ env.APP_PRIMARY }}
+          service: web
+          command: "node src/test-env.js"
+          release: ${{ needs.test-build.outputs.release_id }}
+
+  # --- 4h: Real-World Migration Simulation ---
+  test-run-migration:
+    name: "Run: Simulated db:migrate"
+    runs-on: ubuntu-latest
+    needs: [test-build]
+    steps:
+      - uses: convox/action-login@${{ env.BRANCH_LOGIN }}
+        with:
+          host: ${{ secrets.CONVOX_HOST }}
+          password: ${{ secrets.CONVOX_PASSWORD }}
+
+      - name: Run migration
+        uses: convox/action-run@${{ env.BRANCH_RUN }}
+        with:
+          rack: ${{ secrets.CONVOX_RACK }}
+          app: ${{ env.APP_PRIMARY }}
+          service: web
+          command: "node src/migrate.js"
+
+  #  PHASE 5: EXEC
+  test-exec:
+    name: "Exec: Into Running Container"
+    runs-on: ubuntu-latest
+    needs: [test-build]
+    steps:
+      - uses: convox/action-login@${{ env.BRANCH_LOGIN }}
+        with:
+          host: ${{ secrets.CONVOX_HOST }}
+          password: ${{ secrets.CONVOX_PASSWORD }}
+
+      - name: Exec into container
+        uses: convox/action-exec@${{ env.BRANCH_EXEC }}
+        with:
+          rack: ${{ secrets.CONVOX_RACK }}
+          app: ${{ env.APP_PRIMARY }}
+          service: web
+          command: "node src/test-env.js"
+
+  #  PHASE 6: DEPLOY (Build + Promote in one step)
+  test-deploy:
+    name: "Deploy: Build + Promote"
+    runs-on: ubuntu-latest
+    needs: [test-run-migration]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: convox/action-login@${{ env.BRANCH_LOGIN }}
+        with:
+          host: ${{ secrets.CONVOX_HOST }}
+          password: ${{ secrets.CONVOX_PASSWORD }}
+
+      - name: Deploy with feature branch
+        uses: convox/action-deploy@${{ env.BRANCH_DEPLOY }}
+        with:
+          rack: ${{ secrets.CONVOX_RACK }}
+          app: ${{ env.APP_PRIMARY }}
+          password: ${{ secrets.CONVOX_PASSWORD }}
+          host: ${{ secrets.CONVOX_HOST }}
+
+      - name: Verify deployment
+        run: |
+          convox services --app ${{ env.APP_PRIMARY }} --rack ${{ secrets.CONVOX_RACK }}
+          echo "Deploy completed successfully"
+
+  #  PHASE 7: EXPORT
+  test-export:
+    name: "📦 Export: App Config"
+    runs-on: ubuntu-latest
+    needs: [test-deploy]
+    steps:
+      - uses: convox/action-login@${{ env.BRANCH_LOGIN }}
+        with:
+          host: ${{ secrets.CONVOX_HOST }}
+          password: ${{ secrets.CONVOX_PASSWORD }}
+
+      - name: Export app
+        uses: convox/action-export@${{ env.BRANCH_EXPORT }}
+        with:
+          rack: ${{ secrets.CONVOX_RACK }}
+          app: ${{ env.APP_PRIMARY }}
+
+  #  PHASE 8: DESTROY
+  test-destroy:
+    name: "Destroy: Delete Lifecycle App"
+    runs-on: ubuntu-latest
+    needs: [test-create, test-deploy]
+    steps:
+      - uses: convox/action-login@${{ env.BRANCH_LOGIN }}
+        with:
+          host: ${{ secrets.CONVOX_HOST }}
+          password: ${{ secrets.CONVOX_PASSWORD }}
+
+      - name: Destroy lifecycle test app
+        uses: convox/action-destroy@${{ env.BRANCH_DESTROY }}
+        with:
+          rack: ${{ secrets.CONVOX_RACK }}
+          app: ${{ env.APP_LIFECYCLE }}
+
+      - name: Verify app is gone
+        run: |
+          sleep 10
+          if convox apps info --app ${{ env.APP_LIFECYCLE }} --rack ${{ secrets.CONVOX_RACK }} 2>/dev/null; then
+            echo "::warning::App still exists — may be deleting async"
+          else
+            echo "App destroyed successfully"
+          fi
+
+  #  CLEANUP
+  cleanup:
+    name: "Cleanup"
+    runs-on: ubuntu-latest
+    needs:
+      - test-destroy
+      - test-deploy
+      - test-run-tty
+      - test-run-no-hang
+      - test-run-exit-success
+      - test-run-exit-failure
+      - test-run-exit-custom
+      - test-run-validation-no-app
+      - test-run-validation-no-service
+      - test-run-validation-no-command
+      - test-run-with-release
+      - test-run-migration
+      - test-exec
+      - test-export
+    if: always()
+    steps:
+      - uses: convox/action-login@v2
+        with:
+          host: ${{ secrets.CONVOX_HOST }}
+          password: ${{ secrets.CONVOX_PASSWORD }}
+
+      - name: Remove lifecycle app if it still exists
+        continue-on-error: true
+        run: |
+          if convox apps info --app ${{ env.APP_LIFECYCLE }} --rack ${{ secrets.CONVOX_RACK }} 2>/dev/null; then
+            echo "Cleaning up ${{ env.APP_LIFECYCLE }}..."
+            convox apps delete ${{ env.APP_LIFECYCLE }} --rack ${{ secrets.CONVOX_RACK }}
+          fi
+
+  # ══════════════════════════════════════════════════════════════════════════
+  #  SUMMARY
+  # ══════════════════════════════════════════════════════════════════════════
+  summary:
+    name: "Test Summary"
+    runs-on: ubuntu-latest
+    needs:
+      - test-login
+      - test-create
+      - test-build
+      - test-run-tty
+      - test-run-no-hang
+      - test-run-exit-success
+      - test-run-exit-failure
+      - test-run-exit-custom
+      - test-run-validation-no-app
+      - test-run-validation-no-service
+      - test-run-validation-no-command
+      - test-run-with-release
+      - test-run-migration
+      - test-exec
+      - test-deploy
+      - test-export
+      - test-destroy
+    if: always()
+    steps:
+      - name: Generate summary
+        run: |
+          cat >> $GITHUB_STEP_SUMMARY << 'EOF'
+          ## Convox Actions Test Results
+
+          ### Branch Configuration
+          | Action | Branch |
+          |--------|--------|
+          | action-login | `${{ env.BRANCH_LOGIN }}` |
+          | action-build | `${{ env.BRANCH_BUILD }}` |
+          | action-run | `${{ env.BRANCH_RUN }}` |
+          | action-deploy | `${{ env.BRANCH_DEPLOY }}` |
+          | action-create | `${{ env.BRANCH_CREATE }}` |
+          | action-destroy | `${{ env.BRANCH_DESTROY }}` |
+          | action-exec | `${{ env.BRANCH_EXEC }}` |
+          | action-export | `${{ env.BRANCH_EXPORT }}` |
+
+          ### Test Results
+
+          #### action-login
+          | Test | Status |
+          |------|--------|
+          | Authenticate | ${{ needs.test-login.result }} |
+
+          #### action-create
+          | Test | Status |
+          |------|--------|
+          | Create App | ${{ needs.test-create.result }} |
+
+          #### action-build
+          | Test | Status |
+          |------|--------|
+          | Build Release | ${{ needs.test-build.result }} |
+
+          #### action-run
+          | Test | Status |
+          |------|--------|
+          | TTY Output | ${{ needs.test-run-tty.result }} |
+          | No Hang (Long Output) | ${{ needs.test-run-no-hang.result }} |
+          | Exit Code 0 | ${{ needs.test-run-exit-success.result }} |
+          | Exit Code 1 Propagation | ${{ needs.test-run-exit-failure.result }} |
+          | Exit Code 42 Custom | ${{ needs.test-run-exit-custom.result }} |
+          | Validation: Missing App | ${{ needs.test-run-validation-no-app.result }} |
+          | Validation: Missing Service | ${{ needs.test-run-validation-no-service.result }} |
+          | Validation: Missing Command | ${{ needs.test-run-validation-no-command.result }} |
+          | With Specific Release | ${{ needs.test-run-with-release.result }} |
+          | Simulated Migration | ${{ needs.test-run-migration.result }} |
+
+          #### action-exec
+          | Test | Status |
+          |------|--------|
+          | Exec Command | ${{ needs.test-exec.result }} |
+
+          #### action-deploy
+          | Test | Status |
+          |------|--------|
+          | Build + Promote | ${{ needs.test-deploy.result }} |
+
+          #### action-export
+          | Test | Status |
+          |------|--------|
+          | Export Config | ${{ needs.test-export.result }} |
+
+          #### action-destroy
+          | Test | Status |
+          |------|--------|
+          | Delete App | ${{ needs.test-destroy.result }} |
+          EOF
+
+      - name: Fail if any test failed
+        if: contains(needs.*.result, 'failure')
+        run: |
+          echo "::error::One or more tests failed — check summary above"
+          exit 1
