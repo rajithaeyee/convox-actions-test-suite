@@ -2,46 +2,10 @@ name: "Test All Convox Actions"
 
 on:
   workflow_dispatch:
-    inputs:
-      branch_login:
-        description: "action-login branch (or 'v2' for stable)"
-        default: "v2"
-      branch_build:
-        description: "action-build branch (or 'v2' for stable)"
-        default: "v2"
-      branch_run:
-        description: "action-run branch (or 'v2' for stable)"
-        default: "v2"
-      branch_deploy:
-        description: "action-deploy branch (or 'v2' for stable)"
-        default: "v2"
-      branch_create:
-        description: "action-create branch (or 'v2' for stable)"
-        default: "v2"
-      branch_destroy:
-        description: "action-destroy branch (or 'v2' for stable)"
-        default: "v2"
-      branch_exec:
-        description: "action-exec branch (or 'v2' for stable)"
-        default: "v2"
-      branch_export:
-        description: "action-export branch (or 'v2' for stable)"
-        default: "v2"
   push:
     branches: ["main", "test/*"]
 
-#  Replace 'v2' with the actual branch name from each PR.
 env:
-  BRANCH_LOGIN:   ${{ github.event.inputs.branch_login   || 'v2' }}
-  BRANCH_BUILD:   ${{ github.event.inputs.branch_build   || 'v2' }}
-  BRANCH_RUN:     ${{ github.event.inputs.branch_run     || 'v2' }}
-  BRANCH_DEPLOY:  ${{ github.event.inputs.branch_deploy  || 'v2' }}
-  BRANCH_CREATE:  ${{ github.event.inputs.branch_create  || 'v2' }}
-  BRANCH_DESTROY: ${{ github.event.inputs.branch_destroy || 'v2' }}
-  BRANCH_EXEC:    ${{ github.event.inputs.branch_exec    || 'v2' }}
-  BRANCH_EXPORT:  ${{ github.event.inputs.branch_export  || 'v2' }}
-
-
   APP_PRIMARY: actions-test-primary
   APP_LIFECYCLE: actions-test-lifecycle
 
@@ -52,7 +16,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Login with feature branch
-        uses: convox/action-login@${{ env.BRANCH_LOGIN }}
+        uses: convox/action-login@updates/tty-fix-and-cleanup
         with:
           host: ${{ secrets.CONVOX_HOST }}
           password: ${{ secrets.CONVOX_PASSWORD }}
@@ -60,14 +24,15 @@ jobs:
       - name: Verify CLI is authenticated
         run: |
           convox racks
-          echo "Login successful — CLI authenticated"
-  #  PHASE 2: Create APP
+          echo "Login successful"
+
+  #  PHASE 2: CREATE
   test-create:
     name: "Create: New App"
     runs-on: ubuntu-latest
     needs: [test-login]
     steps:
-      - uses: convox/action-login@${{ env.BRANCH_LOGIN }}
+      - uses: convox/action-login@updates/tty-fix-and-cleanup
         with:
           host: ${{ secrets.CONVOX_HOST }}
           password: ${{ secrets.CONVOX_PASSWORD }}
@@ -77,7 +42,7 @@ jobs:
         run: convox apps delete ${{ env.APP_LIFECYCLE }} --rack ${{ secrets.CONVOX_RACK }} --wait
 
       - name: Create app with feature branch
-        uses: convox/action-create@${{ env.BRANCH_CREATE }}
+        uses: convox/action-create@updates/tty-fix-and-cleanup
         with:
           rack: ${{ secrets.CONVOX_RACK }}
           app: ${{ env.APP_LIFECYCLE }}
@@ -97,14 +62,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: convox/action-login@${{ env.BRANCH_LOGIN }}
+      - uses: convox/action-login@updates/tty-fix-and-cleanup
         with:
           host: ${{ secrets.CONVOX_HOST }}
           password: ${{ secrets.CONVOX_PASSWORD }}
 
       - name: Build with feature branch
         id: build
-        uses: convox/action-build@${{ env.BRANCH_BUILD }}
+        uses: convox/action-build@updates/tty-fix-and-cleanup
         with:
           rack: ${{ secrets.CONVOX_RACK }}
           app: ${{ env.APP_PRIMARY }}
@@ -118,18 +83,19 @@ jobs:
           echo "Build created release ${{ steps.build.outputs.release }}"
 
   #  PHASE 4: RUN (Multiple sub-tests)
+
   test-run-tty:
     name: "Run: TTY Output"
     runs-on: ubuntu-latest
     needs: [test-build]
     steps:
-      - uses: convox/action-login@${{ env.BRANCH_LOGIN }}
+      - uses: convox/action-login@updates/tty-fix-and-cleanup
         with:
           host: ${{ secrets.CONVOX_HOST }}
           password: ${{ secrets.CONVOX_PASSWORD }}
 
       - name: Run TTY detection test
-        uses: convox/action-run@${{ env.BRANCH_RUN }}
+        uses: convox/action-run@updates/tty-fix-and-cleanup
         with:
           rack: ${{ secrets.CONVOX_RACK }}
           app: ${{ env.APP_PRIMARY }}
@@ -137,37 +103,36 @@ jobs:
           command: "node src/test-tty.js"
 
   test-run-no-hang:
-    name: "Run: No Hang (Long Output)"
+    name: "⏱Run: No Hang (Long Output)"
     runs-on: ubuntu-latest
     needs: [test-build]
     timeout-minutes: 5
     steps:
-      - uses: convox/action-login@${{ env.BRANCH_LOGIN }}
+      - uses: convox/action-login@updates/tty-fix-and-cleanup
         with:
           host: ${{ secrets.CONVOX_HOST }}
           password: ${{ secrets.CONVOX_PASSWORD }}
 
       - name: Run long output test (old action hangs here)
-        uses: convox/action-run@${{ env.BRANCH_RUN }}
+        uses: convox/action-run@updates/tty-fix-and-cleanup
         with:
           rack: ${{ secrets.CONVOX_RACK }}
           app: ${{ env.APP_PRIMARY }}
           service: web
           command: "node src/test-long-output.js"
 
-  # --- 4c: Exit Code 0 (Success) ---
   test-run-exit-success:
     name: "Run: Exit Code 0"
     runs-on: ubuntu-latest
     needs: [test-build]
     steps:
-      - uses: convox/action-login@${{ env.BRANCH_LOGIN }}
+      - uses: convox/action-login@updates/tty-fix-and-cleanup
         with:
           host: ${{ secrets.CONVOX_HOST }}
           password: ${{ secrets.CONVOX_PASSWORD }}
 
       - name: Run command that succeeds
-        uses: convox/action-run@${{ env.BRANCH_RUN }}
+        uses: convox/action-run@updates/tty-fix-and-cleanup
         with:
           rack: ${{ secrets.CONVOX_RACK }}
           app: ${{ env.APP_PRIMARY }}
@@ -179,7 +144,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: [test-build]
     steps:
-      - uses: convox/action-login@${{ env.BRANCH_LOGIN }}
+      - uses: convox/action-login@updates/tty-fix-and-cleanup
         with:
           host: ${{ secrets.CONVOX_HOST }}
           password: ${{ secrets.CONVOX_PASSWORD }}
@@ -187,7 +152,7 @@ jobs:
       - name: Run command that fails (expect failure)
         id: should_fail
         continue-on-error: true
-        uses: convox/action-run@${{ env.BRANCH_RUN }}
+        uses: convox/action-run@updates/tty-fix-and-cleanup
         with:
           rack: ${{ secrets.CONVOX_RACK }}
           app: ${{ env.APP_PRIMARY }}
@@ -200,15 +165,14 @@ jobs:
             echo "::error::Expected failure but got '${{ steps.should_fail.outcome }}'"
             exit 1
           fi
-          echo "Exit code 1 correctly propagated"
+          echoExit code 1 correctly propagated"
 
-  # --- 4e: Exit Code 42 (Custom) ---
   test-run-exit-custom:
     name: "Run: Exit Code 42 Propagates"
     runs-on: ubuntu-latest
     needs: [test-build]
     steps:
-      - uses: convox/action-login@${{ env.BRANCH_LOGIN }}
+      - uses: convox/action-login@updates/tty-fix-and-cleanup
         with:
           host: ${{ secrets.CONVOX_HOST }}
           password: ${{ secrets.CONVOX_PASSWORD }}
@@ -216,7 +180,7 @@ jobs:
       - name: Run command that exits 42
         id: should_fail_42
         continue-on-error: true
-        uses: convox/action-run@${{ env.BRANCH_RUN }}
+        uses: convox/action-run@updates/tty-fix-and-cleanup
         with:
           rack: ${{ secrets.CONVOX_RACK }}
           app: ${{ env.APP_PRIMARY }}
@@ -231,13 +195,12 @@ jobs:
           fi
           echo "Custom exit code 42 correctly propagated"
 
-  # --- 4f: Input Validation (Missing required inputs) ---
   test-run-validation-no-app:
     name: "Run: Validates Missing App"
     runs-on: ubuntu-latest
     needs: [test-build]
     steps:
-      - uses: convox/action-login@${{ env.BRANCH_LOGIN }}
+      - uses: convox/action-login@updates/tty-fix-and-cleanup
         with:
           host: ${{ secrets.CONVOX_HOST }}
           password: ${{ secrets.CONVOX_PASSWORD }}
@@ -245,7 +208,7 @@ jobs:
       - name: Run without app (should fail fast)
         id: no_app
         continue-on-error: true
-        uses: convox/action-run@${{ env.BRANCH_RUN }}
+        uses: convox/action-run@updates/tty-fix-and-cleanup
         with:
           rack: ${{ secrets.CONVOX_RACK }}
           service: web
@@ -264,7 +227,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: [test-build]
     steps:
-      - uses: convox/action-login@${{ env.BRANCH_LOGIN }}
+      - uses: convox/action-login@updates/tty-fix-and-cleanup
         with:
           host: ${{ secrets.CONVOX_HOST }}
           password: ${{ secrets.CONVOX_PASSWORD }}
@@ -272,7 +235,7 @@ jobs:
       - name: Run without service
         id: no_svc
         continue-on-error: true
-        uses: convox/action-run@${{ env.BRANCH_RUN }}
+        uses: convox/action-run@updates/tty-fix-and-cleanup
         with:
           rack: ${{ secrets.CONVOX_RACK }}
           app: ${{ env.APP_PRIMARY }}
@@ -287,11 +250,11 @@ jobs:
           echo "Missing 'service' input correctly caught"
 
   test-run-validation-no-command:
-    name: "Run: Validates Missing Command"
+    name: "🛡️ Run: Validates Missing Command"
     runs-on: ubuntu-latest
     needs: [test-build]
     steps:
-      - uses: convox/action-login@${{ env.BRANCH_LOGIN }}
+      - uses: convox/action-login@updates/tty-fix-and-cleanup
         with:
           host: ${{ secrets.CONVOX_HOST }}
           password: ${{ secrets.CONVOX_PASSWORD }}
@@ -299,7 +262,7 @@ jobs:
       - name: Run without command
         id: no_cmd
         continue-on-error: true
-        uses: convox/action-run@${{ env.BRANCH_RUN }}
+        uses: convox/action-run@updates/tty-fix-and-cleanup
         with:
           rack: ${{ secrets.CONVOX_RACK }}
           app: ${{ env.APP_PRIMARY }}
@@ -313,19 +276,18 @@ jobs:
           fi
           echo "Missing 'command' input correctly caught"
 
-  # --- 4g: Run with Specific Release ---
   test-run-with-release:
     name: "Run: With Specific Release"
     runs-on: ubuntu-latest
     needs: [test-build]
     steps:
-      - uses: convox/action-login@${{ env.BRANCH_LOGIN }}
+      - uses: convox/action-login@updates/tty-fix-and-cleanup
         with:
           host: ${{ secrets.CONVOX_HOST }}
           password: ${{ secrets.CONVOX_PASSWORD }}
 
       - name: Run with release from build step
-        uses: convox/action-run@${{ env.BRANCH_RUN }}
+        uses: convox/action-run@updates/tty-fix-and-cleanup
         with:
           rack: ${{ secrets.CONVOX_RACK }}
           app: ${{ env.APP_PRIMARY }}
@@ -333,19 +295,18 @@ jobs:
           command: "node src/test-env.js"
           release: ${{ needs.test-build.outputs.release_id }}
 
-  # --- 4h: Real-World Migration Simulation ---
   test-run-migration:
     name: "Run: Simulated db:migrate"
     runs-on: ubuntu-latest
     needs: [test-build]
     steps:
-      - uses: convox/action-login@${{ env.BRANCH_LOGIN }}
+      - uses: convox/action-login@updates/tty-fix-and-cleanup
         with:
           host: ${{ secrets.CONVOX_HOST }}
           password: ${{ secrets.CONVOX_PASSWORD }}
 
       - name: Run migration
-        uses: convox/action-run@${{ env.BRANCH_RUN }}
+        uses: convox/action-run@updates/tty-fix-and-cleanup
         with:
           rack: ${{ secrets.CONVOX_RACK }}
           app: ${{ env.APP_PRIMARY }}
@@ -358,20 +319,20 @@ jobs:
     runs-on: ubuntu-latest
     needs: [test-build]
     steps:
-      - uses: convox/action-login@${{ env.BRANCH_LOGIN }}
+      - uses: convox/action-login@updates/tty-fix-and-cleanup
         with:
           host: ${{ secrets.CONVOX_HOST }}
           password: ${{ secrets.CONVOX_PASSWORD }}
 
       - name: Exec into container
-        uses: convox/action-exec@${{ env.BRANCH_EXEC }}
+        uses: convox/action-exec@updates/tty-fix-and-cleanup
         with:
           rack: ${{ secrets.CONVOX_RACK }}
           app: ${{ env.APP_PRIMARY }}
           service: web
           command: "node src/test-env.js"
 
-  #  PHASE 6: DEPLOY (Build + Promote in one step)
+  #  PHASE 6: DEPLOY
   test-deploy:
     name: "Deploy: Build + Promote"
     runs-on: ubuntu-latest
@@ -379,13 +340,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: convox/action-login@${{ env.BRANCH_LOGIN }}
+      - uses: convox/action-login@updates/tty-fix-and-cleanup
         with:
           host: ${{ secrets.CONVOX_HOST }}
           password: ${{ secrets.CONVOX_PASSWORD }}
 
       - name: Deploy with feature branch
-        uses: convox/action-deploy@${{ env.BRANCH_DEPLOY }}
+        uses: convox/action-deploy@updates/tty-fix-and-cleanup
         with:
           rack: ${{ secrets.CONVOX_RACK }}
           app: ${{ env.APP_PRIMARY }}
@@ -399,34 +360,34 @@ jobs:
 
   #  PHASE 7: EXPORT
   test-export:
-    name: "📦 Export: App Config"
+    name: "Export: App Config"
     runs-on: ubuntu-latest
     needs: [test-deploy]
     steps:
-      - uses: convox/action-login@${{ env.BRANCH_LOGIN }}
+      - uses: convox/action-login@updates/tty-fix-and-cleanup
         with:
           host: ${{ secrets.CONVOX_HOST }}
           password: ${{ secrets.CONVOX_PASSWORD }}
 
       - name: Export app
-        uses: convox/action-export@${{ env.BRANCH_EXPORT }}
+        uses: convox/action-export@updates/tty-fix-and-cleanup
         with:
           rack: ${{ secrets.CONVOX_RACK }}
           app: ${{ env.APP_PRIMARY }}
 
-  #  PHASE 8: DESTROY
+  #  PHASE 8: DESTROY (only the lifecycle app)
   test-destroy:
     name: "Destroy: Delete Lifecycle App"
     runs-on: ubuntu-latest
     needs: [test-create, test-deploy]
     steps:
-      - uses: convox/action-login@${{ env.BRANCH_LOGIN }}
+      - uses: convox/action-login@updates/tty-fix-and-cleanup
         with:
           host: ${{ secrets.CONVOX_HOST }}
           password: ${{ secrets.CONVOX_PASSWORD }}
 
       - name: Destroy lifecycle test app
-        uses: convox/action-destroy@${{ env.BRANCH_DESTROY }}
+        uses: convox/action-destroy@updates/tty-fix-and-cleanup
         with:
           rack: ${{ secrets.CONVOX_RACK }}
           app: ${{ env.APP_LIFECYCLE }}
@@ -440,7 +401,7 @@ jobs:
             echo "App destroyed successfully"
           fi
 
-  #  CLEANUP
+  #  CLEANUP (Safety net)
   cleanup:
     name: "Cleanup"
     runs-on: ubuntu-latest
@@ -461,6 +422,7 @@ jobs:
       - test-export
     if: always()
     steps:
+      # Use stable v2 for cleanup
       - uses: convox/action-login@v2
         with:
           host: ${{ secrets.CONVOX_HOST }}
@@ -474,9 +436,7 @@ jobs:
             convox apps delete ${{ env.APP_LIFECYCLE }} --rack ${{ secrets.CONVOX_RACK }}
           fi
 
-  # ══════════════════════════════════════════════════════════════════════════
   #  SUMMARY
-  # ══════════════════════════════════════════════════════════════════════════
   summary:
     name: "Test Summary"
     runs-on: ubuntu-latest
@@ -505,19 +465,7 @@ jobs:
           cat >> $GITHUB_STEP_SUMMARY << 'EOF'
           ## Convox Actions Test Results
 
-          ### Branch Configuration
-          | Action | Branch |
-          |--------|--------|
-          | action-login | `${{ env.BRANCH_LOGIN }}` |
-          | action-build | `${{ env.BRANCH_BUILD }}` |
-          | action-run | `${{ env.BRANCH_RUN }}` |
-          | action-deploy | `${{ env.BRANCH_DEPLOY }}` |
-          | action-create | `${{ env.BRANCH_CREATE }}` |
-          | action-destroy | `${{ env.BRANCH_DESTROY }}` |
-          | action-exec | `${{ env.BRANCH_EXEC }}` |
-          | action-export | `${{ env.BRANCH_EXPORT }}` |
-
-          ### Test Results
+          **Branch:** `updates/tty-fix-and-cleanup`
 
           #### action-login
           | Test | Status |
@@ -553,7 +501,7 @@ jobs:
           |------|--------|
           | Exec Command | ${{ needs.test-exec.result }} |
 
-          #### action-deploy
+          #### 🚀ction-deploy
           | Test | Status |
           |------|--------|
           | Build + Promote | ${{ needs.test-deploy.result }} |

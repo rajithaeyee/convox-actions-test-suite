@@ -1,3 +1,8 @@
+/**
+ * Environment Verification Test
+ * Prints all Convox-related environment info.
+ * Useful after login/build/deploy to verify state.
+ */
 console.log("╔══════════════════════════════════════════╗");
 console.log("║       Environment Verification           ║");
 console.log("╠══════════════════════════════════════════╣");
@@ -25,5 +30,5 @@ if (convoxVars.length > 0) {
   });
 }
 
-console.log("\n\x1b[32m Environment check complete\x1b[0m");
+console.log("\n\x1b[32m✅ Environment check complete\x1b[0m");
 process.exit(0);

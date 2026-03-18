@@ -11,11 +11,11 @@ async function seed() {
     await sleep(300);
     console.log(` \x1b[36m${count} records inserted\x1b[0m`);
   }
-  console.log(`\n\x1b[32m Seeding completed\x1b[0m`);
+  console.log(`\n\x1b[32m✅ Seeding completed\x1b[0m`);
   process.exit(0);
 }
 
 seed().catch((err) => {
-  console.error(`\x1b[31m Seeding failed: ${err.message}\x1b[0m`);
+  console.error(`\x1b[31m❌ Seeding failed: ${err.message}\x1b[0m`);
   process.exit(1);
 });

@@ -25,14 +25,14 @@ console.log("\x1b[36mCyan text\x1b[0m");
 console.log("\x1b[1mBold text\x1b[0m");
 
 console.log("\n--- Unicode Test ---");
-console.log("Success");
+console.log("✅ ❌ ⚡ 🚀 📦");
 
 if (isTTY) {
   console.log(
-    "\n\x1b[32m TTY properly allocated - pseudo-TTY fix working!\x1b[0m"
+    "\n\x1b[32m✅ TTY properly allocated - pseudo-TTY fix working!\x1b[0m"
   );
 } else {
-  console.log("\n\x1b[33m No TTY detected - non-interactive mode\x1b[0m");
+  console.log("\n\x1b[33m⚠️  No TTY detected - non-interactive mode\x1b[0m");
 }
 
 process.exit(0);

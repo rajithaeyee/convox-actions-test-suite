@@ -1,5 +1,7 @@
 /**
  * Long Output / Hang Test
+ * The old action-run would hang on sustained output.
+ * If this completes, the pseudo-TTY fix works.
  */
 async function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -32,7 +34,7 @@ async function run() {
   }
 
   const totalTime = ((Date.now() - startTime) / 1000).toFixed(1);
-  console.log(`\n\x1b[32m Completed ${TOTAL_LINES} lines in ${totalTime}s - DID NOT HANG\x1b[0m`);
+  console.log(`\n\x1b[32m✅ Completed ${TOTAL_LINES} lines in ${totalTime}s - DID NOT HANG\x1b[0m`);
   process.exit(0);
 }
 
