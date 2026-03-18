@@ -68,7 +68,7 @@ jobs:
   test-build:
     name: "Build: Create Release"
     runs-on: ubuntu-latest
-    needs: [test-login]
+    needs: [test-login, test-create]
     outputs:
       release_id: ${{ steps.build.outputs.release }}
     steps:
@@ -90,13 +90,13 @@ jobs:
         uses: convox/action-build@updates/tty-fix-and-cleanup
         with:
           rack: ${{ secrets.CONVOX_RACK }}
-          app: ${{ env.APP_PRIMARY }}
+          app: ${{ secrets.APP_PRIMARY }}
 
       - name: Verify release was created
         run: |
           echo "Release ID: ${{ steps.build.outputs.release }}"
           convox releases info ${{ steps.build.outputs.release }} \
-            --app ${{ env.APP_PRIMARY }} \
+            --app ${{ secrets.APP_PRIMARY }} \
             --rack ${{ secrets.CONVOX_RACK }}
           echo "Build created release ${{ steps.build.outputs.release }}"
 
@@ -116,7 +116,7 @@ jobs:
         uses: convox/action-run@updates/tty-fix-and-cleanup
         with:
           rack: ${{ secrets.CONVOX_RACK }}
-          app: ${{ env.APP_PRIMARY }}
+          app: ${{ secrets.APP_PRIMARY }}
           service: web
           command: "node src/test-tty.js"
 
@@ -135,7 +135,7 @@ jobs:
         uses: convox/action-run@updates/tty-fix-and-cleanup
         with:
           rack: ${{ secrets.CONVOX_RACK }}
-          app: ${{ env.APP_PRIMARY }}
+          app: ${{ secrets.APP_PRIMARY }}
           service: web
           command: "node src/test-long-output.js"
 
@@ -153,7 +153,7 @@ jobs:
         uses: convox/action-run@updates/tty-fix-and-cleanup
         with:
           rack: ${{ secrets.CONVOX_RACK }}
-          app: ${{ env.APP_PRIMARY }}
+          app: ${{ secrets.APP_PRIMARY }}
           service: web
           command: "node src/test-exit-codes.js 0"
 
@@ -173,7 +173,7 @@ jobs:
         uses: convox/action-run@updates/tty-fix-and-cleanup
         with:
           rack: ${{ secrets.CONVOX_RACK }}
-          app: ${{ env.APP_PRIMARY }}
+          app: ${{ secrets.APP_PRIMARY }}
           service: web
           command: "node src/test-exit-codes.js 1"
 
@@ -201,7 +201,7 @@ jobs:
         uses: convox/action-run@updates/tty-fix-and-cleanup
         with:
           rack: ${{ secrets.CONVOX_RACK }}
-          app: ${{ env.APP_PRIMARY }}
+          app: ${{ secrets.APP_PRIMARY }}
           service: web
           command: "node src/test-exit-codes.js 42"
 
@@ -256,7 +256,7 @@ jobs:
         uses: convox/action-run@updates/tty-fix-and-cleanup
         with:
           rack: ${{ secrets.CONVOX_RACK }}
-          app: ${{ env.APP_PRIMARY }}
+          app: ${{ secrets.APP_PRIMARY }}
           command: "echo should not run"
 
       - name: Verify validation error
@@ -283,7 +283,7 @@ jobs:
         uses: convox/action-run@updates/tty-fix-and-cleanup
         with:
           rack: ${{ secrets.CONVOX_RACK }}
-          app: ${{ env.APP_PRIMARY }}
+          app: ${{ secrets.APP_PRIMARY }}
           service: web
 
       - name: Verify validation error
@@ -308,7 +308,7 @@ jobs:
         uses: convox/action-run@updates/tty-fix-and-cleanup
         with:
           rack: ${{ secrets.CONVOX_RACK }}
-          app: ${{ env.APP_PRIMARY }}
+          app: ${{ secrets.APP_PRIMARY }}
           service: web
           command: "node src/test-env.js"
           release: ${{ needs.test-build.outputs.release_id }}
@@ -327,7 +327,7 @@ jobs:
         uses: convox/action-run@updates/tty-fix-and-cleanup
         with:
           rack: ${{ secrets.CONVOX_RACK }}
-          app: ${{ env.APP_PRIMARY }}
+          app: ${{ secrets.APP_PRIMARY }}
           service: web
           command: "node src/migrate.js"
 
@@ -346,7 +346,7 @@ jobs:
         uses: convox/action-exec@updates/tty-fix-and-cleanup
         with:
           rack: ${{ secrets.CONVOX_RACK }}
-          app: ${{ env.APP_PRIMARY }}
+          app: ${{ secrets.APP_PRIMARY }}
           service: web
           command: "node src/test-env.js"
 
@@ -373,13 +373,13 @@ jobs:
         uses: convox/action-deploy@updates/tty-fix-and-cleanup
         with:
           rack: ${{ secrets.CONVOX_RACK }}
-          app: ${{ env.APP_PRIMARY }}
+          app: ${{ secrets.APP_PRIMARY }}
           password: ${{ secrets.CONVOX_PASSWORD }}
           host: ${{ secrets.CONVOX_HOST }}
 
       - name: Verify deployment
         run: |
-          convox services --app ${{ env.APP_PRIMARY }} --rack ${{ secrets.CONVOX_RACK }}
+          convox services --app ${{ secrets.APP_PRIMARY }} --rack ${{ secrets.CONVOX_RACK }}
           echo "Deploy completed successfully"
 
   #  PHASE 7: EXPORT
@@ -397,7 +397,7 @@ jobs:
         uses: convox/action-export@updates/tty-fix-and-cleanup
         with:
           rack: ${{ secrets.CONVOX_RACK }}
-          app: ${{ env.APP_PRIMARY }}
+          app: ${{ secrets.APP_PRIMARY }}
 
   #  PHASE 8: DESTROY (only the lifecycle app)
   test-destroy:
