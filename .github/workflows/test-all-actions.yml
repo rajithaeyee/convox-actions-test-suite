@@ -68,7 +68,7 @@ jobs:
   test-build:
     name: "Build: Create Release"
     runs-on: ubuntu-latest
-    needs: [test-login]
+    needs: [test-login, test-create]
     outputs:
       release_id: ${{ steps.build.outputs.release }}
     steps:
