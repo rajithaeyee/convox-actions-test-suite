@@ -23,12 +23,12 @@ async function runMigrations() {
   }
 
   console.log(
-    `\n\x1b[32m All ${MIGRATIONS.length} migrations completed successfully\x1b[0m`
+    `\n\x1b[32m✅ All ${MIGRATIONS.length} migrations completed successfully\x1b[0m`
   );
   process.exit(0);
 }
 
 runMigrations().catch((err) => {
-  console.error(`\x1b[31m Migration failed: ${err.message}\x1b[0m`);
+  console.error(`\x1b[31m❌ Migration failed: ${err.message}\x1b[0m`);
   process.exit(1);
 });
