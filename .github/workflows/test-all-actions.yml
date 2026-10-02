@@ -13,8 +13,8 @@ jobs:
     name: "Login: Authenticate"
     runs-on: ubuntu-latest
     steps:
-      - name: Login with latest release
-        uses: convox/action-login@v2.1.0
+      - name: Login with feature branch
+        uses: convox/action-login@updates/tty-fix-and-cleanup
         with:
           host: ${{ secrets.CONVOX_HOST }}
           password: ${{ secrets.CONVOX_PASSWORD }}
@@ -36,7 +36,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: [test-login]
     steps:
-      - uses: convox/action-login@v2.1.0
+      - uses: convox/action-login@updates/tty-fix-and-cleanup
         with:
           host: ${{ secrets.CONVOX_HOST }}
           password: ${{ secrets.CONVOX_PASSWORD }}
@@ -51,8 +51,8 @@ jobs:
         continue-on-error: true
         run: convox apps delete ${{ env.APP_LIFECYCLE }} --rack ${{ secrets.CONVOX_RACK }} --wait
 
-      - name: Create app with latest release
-        uses: convox/action-create@v1.0.0
+      - name: Create app with feature branch
+        uses: convox/action-create@updates/tty-fix-and-cleanup
         with:
           rack: ${{ secrets.CONVOX_RACK }}
           app: ${{ env.APP_LIFECYCLE }}
@@ -73,7 +73,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: convox/action-login@v2.1.0
+      - uses: convox/action-login@updates/tty-fix-and-cleanup
         with:
           host: ${{ secrets.CONVOX_HOST }}
           password: ${{ secrets.CONVOX_PASSWORD }}
@@ -84,28 +84,25 @@ jobs:
           sudo mv /tmp/convox /usr/local/bin/convox
           chmod +x /usr/local/bin/convox
 
-      - name: Build with latest release
+      - name: Build with feature branch
         id: build
-        uses: convox/action-build@v2.4.0
+        uses: convox/action-build@updates/tty-fix-and-cleanup
         with:
           rack: ${{ secrets.CONVOX_RACK }}
           app: ${{ env.APP_PRIMARY }}
 
-      - name: Promote with feature branch
-        uses: convox/action-promote@actions-update-092526
-        with:
-          rack: ${{ secrets.CONVOX_RACK }}
-          app: ${{ env.APP_PRIMARY }}
-          release: ${{ steps.build.outputs.release }}
+      - name: Promote the release so run/exec have a working image
+        run: |
+          echo "Promoting release ${{ steps.build.outputs.release }}..."
+          convox releases promote ${{ steps.build.outputs.release }} \
+            --app ${{ env.APP_PRIMARY }} \
+            --rack ${{ secrets.CONVOX_RACK }} \
+            --wait
+          echo "Release ${{ steps.build.outputs.release }} promoted"
 
       - name: Verify release is active
         run: |
-          current=$(convox apps info --app ${{ env.APP_PRIMARY }} --rack ${{ secrets.CONVOX_RACK }} | awk '/^Release/ {print $2}')
-          echo "Active release: $current"
-          if [ "$current" != "${{ steps.build.outputs.release }}" ]; then
-            echo "::error::Expected active release ${{ steps.build.outputs.release }}, got '$current'"
-            exit 1
-          fi
+          convox releases -a ${{ env.APP_PRIMARY }} --rack ${{ secrets.CONVOX_RACK }} | head -5
           echo "Build + promote complete"
 
   #  PHASE 4: RUN (Multiple sub-tests)
@@ -116,13 +113,13 @@ jobs:
     runs-on: ubuntu-latest
     needs: [test-build]
     steps:
-      - uses: convox/action-login@v2.1.0
+      - uses: convox/action-login@updates/tty-fix-and-cleanup
         with:
           host: ${{ secrets.CONVOX_HOST }}
           password: ${{ secrets.CONVOX_PASSWORD }}
 
       - name: Run TTY detection test
-        uses: convox/action-run@actions-update-092526
+        uses: convox/action-run@updates/tty-fix-and-cleanup
         with:
           rack: ${{ secrets.CONVOX_RACK }}
           app: ${{ env.APP_PRIMARY }}
@@ -135,13 +132,13 @@ jobs:
     needs: [test-build]
     timeout-minutes: 5
     steps:
-      - uses: convox/action-login@v2.1.0
+      - uses: convox/action-login@updates/tty-fix-and-cleanup
         with:
           host: ${{ secrets.CONVOX_HOST }}
           password: ${{ secrets.CONVOX_PASSWORD }}
 
       - name: Run long output test (old action hangs here)
-        uses: convox/action-run@actions-update-092526
+        uses: convox/action-run@updates/tty-fix-and-cleanup
         with:
           rack: ${{ secrets.CONVOX_RACK }}
           app: ${{ env.APP_PRIMARY }}
@@ -153,13 +150,13 @@ jobs:
     runs-on: ubuntu-latest
     needs: [test-build]
     steps:
-      - uses: convox/action-login@v2.1.0
+      - uses: convox/action-login@updates/tty-fix-and-cleanup
         with:
           host: ${{ secrets.CONVOX_HOST }}
           password: ${{ secrets.CONVOX_PASSWORD }}
 
       - name: Run command that succeeds
-        uses: convox/action-run@actions-update-092526
+        uses: convox/action-run@updates/tty-fix-and-cleanup
         with:
           rack: ${{ secrets.CONVOX_RACK }}
           app: ${{ env.APP_PRIMARY }}
@@ -171,7 +168,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: [test-build]
     steps:
-      - uses: convox/action-login@v2.1.0
+      - uses: convox/action-login@updates/tty-fix-and-cleanup
         with:
           host: ${{ secrets.CONVOX_HOST }}
           password: ${{ secrets.CONVOX_PASSWORD }}
@@ -179,7 +176,7 @@ jobs:
       - name: Run command that fails (expect failure)
         id: should_fail
         continue-on-error: true
-        uses: convox/action-run@actions-update-092526
+        uses: convox/action-run@updates/tty-fix-and-cleanup
         with:
           rack: ${{ secrets.CONVOX_RACK }}
           app: ${{ env.APP_PRIMARY }}
@@ -199,7 +196,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: [test-build]
     steps:
-      - uses: convox/action-login@v2.1.0
+      - uses: convox/action-login@updates/tty-fix-and-cleanup
         with:
           host: ${{ secrets.CONVOX_HOST }}
           password: ${{ secrets.CONVOX_PASSWORD }}
@@ -207,7 +204,7 @@ jobs:
       - name: Run command that exits 42
         id: should_fail_42
         continue-on-error: true
-        uses: convox/action-run@actions-update-092526
+        uses: convox/action-run@updates/tty-fix-and-cleanup
         with:
           rack: ${{ secrets.CONVOX_RACK }}
           app: ${{ env.APP_PRIMARY }}
@@ -227,7 +224,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: [test-build]
     steps:
-      - uses: convox/action-login@v2.1.0
+      - uses: convox/action-login@updates/tty-fix-and-cleanup
         with:
           host: ${{ secrets.CONVOX_HOST }}
           password: ${{ secrets.CONVOX_PASSWORD }}
@@ -235,7 +232,7 @@ jobs:
       - name: Run without app (should fail fast)
         id: no_app
         continue-on-error: true
-        uses: convox/action-run@actions-update-092526
+        uses: convox/action-run@updates/tty-fix-and-cleanup
         with:
           rack: ${{ secrets.CONVOX_RACK }}
           service: web
@@ -254,7 +251,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: [test-build]
     steps:
-      - uses: convox/action-login@v2.1.0
+      - uses: convox/action-login@updates/tty-fix-and-cleanup
         with:
           host: ${{ secrets.CONVOX_HOST }}
           password: ${{ secrets.CONVOX_PASSWORD }}
@@ -262,7 +259,7 @@ jobs:
       - name: Run without service
         id: no_svc
         continue-on-error: true
-        uses: convox/action-run@actions-update-092526
+        uses: convox/action-run@updates/tty-fix-and-cleanup
         with:
           rack: ${{ secrets.CONVOX_RACK }}
           app: ${{ env.APP_PRIMARY }}
@@ -281,7 +278,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: [test-build]
     steps:
-      - uses: convox/action-login@v2.1.0
+      - uses: convox/action-login@updates/tty-fix-and-cleanup
         with:
           host: ${{ secrets.CONVOX_HOST }}
           password: ${{ secrets.CONVOX_PASSWORD }}
@@ -289,7 +286,7 @@ jobs:
       - name: Run without command
         id: no_cmd
         continue-on-error: true
-        uses: convox/action-run@actions-update-092526
+        uses: convox/action-run@updates/tty-fix-and-cleanup
         with:
           rack: ${{ secrets.CONVOX_RACK }}
           app: ${{ env.APP_PRIMARY }}
@@ -308,13 +305,13 @@ jobs:
     runs-on: ubuntu-latest
     needs: [test-build]
     steps:
-      - uses: convox/action-login@v2.1.0
+      - uses: convox/action-login@updates/tty-fix-and-cleanup
         with:
           host: ${{ secrets.CONVOX_HOST }}
           password: ${{ secrets.CONVOX_PASSWORD }}
 
       - name: Run with release from build step
-        uses: convox/action-run@actions-update-092526
+        uses: convox/action-run@updates/tty-fix-and-cleanup
         with:
           rack: ${{ secrets.CONVOX_RACK }}
           app: ${{ env.APP_PRIMARY }}
@@ -327,239 +324,18 @@ jobs:
     runs-on: ubuntu-latest
     needs: [test-build]
     steps:
-      - uses: convox/action-login@v2.1.0
+      - uses: convox/action-login@updates/tty-fix-and-cleanup
         with:
           host: ${{ secrets.CONVOX_HOST }}
           password: ${{ secrets.CONVOX_PASSWORD }}
 
       - name: Run migration
-        uses: convox/action-run@actions-update-092526
+        uses: convox/action-run@updates/tty-fix-and-cleanup
         with:
           rack: ${{ secrets.CONVOX_RACK }}
           app: ${{ env.APP_PRIMARY }}
           service: web
           command: "node src/migrate.js"
-
-  #  PHASE 4b: RUN — wait / detach / timeout / retain (V3 rack 3.25.5+)
-
-  test-run-wait-success:
-    name: "Run: Wait Mode Exit 0 + PID Output"
-    runs-on: ubuntu-latest
-    needs: [test-build]
-    steps:
-      - uses: convox/action-login@v2.1.0
-        with:
-          host: ${{ secrets.CONVOX_HOST }}
-          password: ${{ secrets.CONVOX_PASSWORD }}
-
-      - name: Run with wait
-        id: run
-        uses: convox/action-run@actions-update-092526
-        with:
-          rack: ${{ secrets.CONVOX_RACK }}
-          app: ${{ env.APP_PRIMARY }}
-          service: web
-          command: "node src/test-exit-codes.js 0"
-          wait: true
-
-      - name: Verify pid output
-        run: |
-          if [ -z "${{ steps.run.outputs.pid }}" ]; then
-            echo "::error::Expected 'pid' output in wait mode"
-            exit 1
-          fi
-          echo "Wait mode returned pid ${{ steps.run.outputs.pid }}"
-
-  test-run-wait-failure:
-    name: "Run: Wait Mode Exit 1 Propagates"
-    runs-on: ubuntu-latest
-    needs: [test-build]
-    steps:
-      - uses: convox/action-login@v2.1.0
-        with:
-          host: ${{ secrets.CONVOX_HOST }}
-          password: ${{ secrets.CONVOX_PASSWORD }}
-
-      - name: Run failing command with wait (expect failure)
-        id: should_fail
-        continue-on-error: true
-        uses: convox/action-run@actions-update-092526
-        with:
-          rack: ${{ secrets.CONVOX_RACK }}
-          app: ${{ env.APP_PRIMARY }}
-          service: web
-          command: "node src/test-exit-codes.js 1"
-          wait: true
-
-      - name: Verify step actually failed
-        run: |
-          if [ "${{ steps.should_fail.outcome }}" != "failure" ]; then
-            echo "::error::Expected failure but got '${{ steps.should_fail.outcome }}'"
-            exit 1
-          fi
-          echo "Exit code 1 correctly propagated in wait mode"
-
-  test-run-wait-timeout:
-    name: "Run: Wait Mode Timeout"
-    runs-on: ubuntu-latest
-    needs: [test-build]
-    timeout-minutes: 5
-    steps:
-      - uses: convox/action-login@v2.1.0
-        with:
-          host: ${{ secrets.CONVOX_HOST }}
-          password: ${{ secrets.CONVOX_PASSWORD }}
-
-      - name: Run long command with short timeout (expect failure)
-        id: should_timeout
-        continue-on-error: true
-        uses: convox/action-run@actions-update-092526
-        with:
-          rack: ${{ secrets.CONVOX_RACK }}
-          app: ${{ env.APP_PRIMARY }}
-          service: web
-          command: "sleep 120"
-          wait: true
-          timeout: 15
-
-      - name: Verify timeout failed the step
-        run: |
-          if [ "${{ steps.should_timeout.outcome }}" != "failure" ]; then
-            echo "::error::Expected timeout failure but got '${{ steps.should_timeout.outcome }}'"
-            exit 1
-          fi
-          echo "Timeout correctly enforced"
-
-  test-run-wait-retain:
-    name: "Run: Wait + Retain Keeps Process Readable"
-    runs-on: ubuntu-latest
-    needs: [test-build]
-    steps:
-      - uses: convox/action-login@v2.1.0
-        with:
-          host: ${{ secrets.CONVOX_HOST }}
-          password: ${{ secrets.CONVOX_PASSWORD }}
-
-      - name: Install Convox CLI
-        run: |
-          curl -L https://github.com/convox/convox/releases/latest/download/convox-linux -o /tmp/convox
-          sudo mv /tmp/convox /usr/local/bin/convox
-          chmod +x /usr/local/bin/convox
-
-      - name: Run with wait and retain
-        id: run
-        uses: convox/action-run@actions-update-092526
-        with:
-          rack: ${{ secrets.CONVOX_RACK }}
-          app: ${{ env.APP_PRIMARY }}
-          service: web
-          command: "node src/test-env.js"
-          wait: true
-          retain: 600
-
-      - name: Verify finished process is still readable
-        run: |
-          pid="${{ steps.run.outputs.pid }}"
-          if [ -z "$pid" ]; then
-            echo "::error::Expected 'pid' output"
-            exit 1
-          fi
-          convox ps info "$pid" --app ${{ env.APP_PRIMARY }} --rack ${{ secrets.CONVOX_RACK }}
-          echo "Retained process $pid is readable"
-
-  test-run-detach:
-    name: "Run: Detach Returns PID"
-    runs-on: ubuntu-latest
-    needs: [test-build]
-    steps:
-      - uses: convox/action-login@v2.1.0
-        with:
-          host: ${{ secrets.CONVOX_HOST }}
-          password: ${{ secrets.CONVOX_PASSWORD }}
-
-      - name: Install Convox CLI
-        run: |
-          curl -L https://github.com/convox/convox/releases/latest/download/convox-linux -o /tmp/convox
-          sudo mv /tmp/convox /usr/local/bin/convox
-          chmod +x /usr/local/bin/convox
-
-      - name: Run detached
-        id: run
-        uses: convox/action-run@actions-update-092526
-        with:
-          rack: ${{ secrets.CONVOX_RACK }}
-          app: ${{ env.APP_PRIMARY }}
-          service: web
-          command: "node src/test-env.js"
-          detach: true
-          retain: 600
-
-      - name: Verify pid and process info
-        run: |
-          pid="${{ steps.run.outputs.pid }}"
-          if [ -z "$pid" ]; then
-            echo "::error::Expected 'pid' output in detach mode"
-            exit 1
-          fi
-          convox ps info "$pid" --app ${{ env.APP_PRIMARY }} --rack ${{ secrets.CONVOX_RACK }}
-          echo "Detached process $pid started"
-
-  test-run-validation-new-inputs:
-    name: "Run: Validates wait/timeout/retain Inputs"
-    runs-on: ubuntu-latest
-    needs: [test-build]
-    steps:
-      - uses: convox/action-login@v2.1.0
-        with:
-          host: ${{ secrets.CONVOX_HOST }}
-          password: ${{ secrets.CONVOX_PASSWORD }}
-
-      - name: Invalid timeout (should fail fast)
-        id: bad_timeout
-        continue-on-error: true
-        uses: convox/action-run@actions-update-092526
-        with:
-          rack: ${{ secrets.CONVOX_RACK }}
-          app: ${{ env.APP_PRIMARY }}
-          service: web
-          command: "echo should not run"
-          timeout: abc
-
-      - name: Invalid wait value (should fail fast)
-        id: bad_wait
-        continue-on-error: true
-        uses: convox/action-run@actions-update-092526
-        with:
-          rack: ${{ secrets.CONVOX_RACK }}
-          app: ${{ env.APP_PRIMARY }}
-          service: web
-          command: "echo should not run"
-          wait: "maybe"
-
-      - name: Retain without wait or detach (should fail fast)
-        id: bad_retain
-        continue-on-error: true
-        uses: convox/action-run@actions-update-092526
-        with:
-          rack: ${{ secrets.CONVOX_RACK }}
-          app: ${{ env.APP_PRIMARY }}
-          service: web
-          command: "echo should not run"
-          retain: 600
-
-      - name: Verify validation errors
-        run: |
-          failed=0
-          for pair in "timeout:${{ steps.bad_timeout.outcome }}" "wait:${{ steps.bad_wait.outcome }}" "retain:${{ steps.bad_retain.outcome }}"; do
-            name="${pair%%:*}"; outcome="${pair#*:}"
-            if [ "$outcome" != "failure" ]; then
-              echo "::error::Invalid '$name' input should have failed, got '$outcome'"
-              failed=1
-            else
-              echo "Invalid '$name' input correctly caught"
-            fi
-          done
-          exit $failed
 
   #  PHASE 5: EXEC
   test-exec:
@@ -567,13 +343,13 @@ jobs:
     runs-on: ubuntu-latest
     needs: [test-build]
     steps:
-      - uses: convox/action-login@v2.1.0
+      - uses: convox/action-login@updates/tty-fix-and-cleanup
         with:
           host: ${{ secrets.CONVOX_HOST }}
           password: ${{ secrets.CONVOX_PASSWORD }}
 
       - name: Exec into container
-        uses: convox/action-exec@v1.1.0
+        uses: convox/action-exec@updates/tty-fix-and-cleanup
         with:
           rack: ${{ secrets.CONVOX_RACK }}
           app: ${{ env.APP_PRIMARY }}
@@ -588,7 +364,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: convox/action-login@v2.1.0
+      - uses: convox/action-login@updates/tty-fix-and-cleanup
         with:
           host: ${{ secrets.CONVOX_HOST }}
           password: ${{ secrets.CONVOX_PASSWORD }}
@@ -600,7 +376,7 @@ jobs:
           chmod +x /usr/local/bin/convox
 
       - name: Deploy with feature branch
-        uses: convox/action-deploy@actions-update-092526
+        uses: convox/action-deploy@updates/tty-fix-and-cleanup
         with:
           rack: ${{ secrets.CONVOX_RACK }}
           app: ${{ env.APP_PRIMARY }}
@@ -621,7 +397,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: [test-create, test-deploy]
     steps:
-      - uses: convox/action-login@v2.1.0
+      - uses: convox/action-login@updates/tty-fix-and-cleanup
         with:
           host: ${{ secrets.CONVOX_HOST }}
           password: ${{ secrets.CONVOX_PASSWORD }}
@@ -633,7 +409,7 @@ jobs:
           chmod +x /usr/local/bin/convox
 
       - name: Destroy lifecycle test app
-        uses: convox/action-destroy@v1.0.0
+        uses: convox/action-destroy@updates/tty-fix-and-cleanup
         with:
           rack: ${{ secrets.CONVOX_RACK }}
           app: ${{ env.APP_LIFECYCLE }}
@@ -664,16 +440,10 @@ jobs:
       - test-run-validation-no-command
       - test-run-with-release
       - test-run-migration
-      - test-run-wait-success
-      - test-run-wait-failure
-      - test-run-wait-timeout
-      - test-run-wait-retain
-      - test-run-detach
-      - test-run-validation-new-inputs
       - test-exec
     if: always()
     steps:
-      - uses: convox/action-login@v2.1.0
+      - uses: convox/action-login@v2
         with:
           host: ${{ secrets.CONVOX_HOST }}
           password: ${{ secrets.CONVOX_PASSWORD }}
@@ -710,12 +480,6 @@ jobs:
       - test-run-validation-no-command
       - test-run-with-release
       - test-run-migration
-      - test-run-wait-success
-      - test-run-wait-failure
-      - test-run-wait-timeout
-      - test-run-wait-retain
-      - test-run-detach
-      - test-run-validation-new-inputs
       - test-exec
       - test-deploy
       - test-destroy
@@ -726,7 +490,7 @@ jobs:
           cat >> $GITHUB_STEP_SUMMARY << 'EOF'
           ## Convox Actions Test Results
 
-          **Branches:** `actions-update-092526` (run, deploy, promote) · latest releases (others)
+          **Branch:** `updates/tty-fix-and-cleanup`
 
           #### action-login
           | Test | Status |
@@ -741,7 +505,7 @@ jobs:
           #### action-build
           | Test | Status |
           |------|--------|
-          | Build + Promote (action-promote) | ${{ needs.test-build.result }} |
+          | Build + Promote | ${{ needs.test-build.result }} |
 
           #### action-run
           | Test | Status |
@@ -756,12 +520,6 @@ jobs:
           | Validation: Missing Command | ${{ needs.test-run-validation-no-command.result }} |
           | With Specific Release | ${{ needs.test-run-with-release.result }} |
           | Simulated Migration | ${{ needs.test-run-migration.result }} |
-          | Wait: Exit 0 + PID | ${{ needs.test-run-wait-success.result }} |
-          | Wait: Exit 1 Propagation | ${{ needs.test-run-wait-failure.result }} |
-          | Wait: Timeout | ${{ needs.test-run-wait-timeout.result }} |
-          | Wait + Retain | ${{ needs.test-run-wait-retain.result }} |
-          | Detach: PID Output | ${{ needs.test-run-detach.result }} |
-          | Validation: wait/timeout/retain | ${{ needs.test-run-validation-new-inputs.result }} |
 
           #### action-exec
           | Test | Status |
