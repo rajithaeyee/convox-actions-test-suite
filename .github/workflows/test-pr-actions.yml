@@ -1,0 +1,709 @@
+name: "Test PR Actions (deploy, promote, run)"
+
+# Tests only the actions changed on the actions-update-092526 branches.
+# Creates a throwaway app, exercises deploy -> promote -> run, then deletes it.
+# Actions not under test (login, create) use their latest releases.
+
+on:
+  workflow_dispatch:
+
+env:
+  APP: actions-test-pr-${{ github.run_id }}
+
+jobs:
+  #  PHASE 1: SETUP — create a fresh app for this run
+  setup:
+    name: "Setup: Create Test App"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: convox/action-login@v2.1.0
+        with:
+          host: ${{ secrets.CONVOX_HOST }}
+          password: ${{ secrets.CONVOX_PASSWORD }}
+
+      - name: Create app
+        uses: convox/action-create@v1.0.0
+        with:
+          rack: ${{ secrets.CONVOX_RACK }}
+          app: ${{ env.APP }}
+
+  #  PHASE 2: action-deploy — build + promote in one step
+  test-deploy:
+    name: "Deploy: Build + Promote"
+    runs-on: ubuntu-latest
+    needs: [setup]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: convox/action-login@v2.1.0
+        with:
+          host: ${{ secrets.CONVOX_HOST }}
+          password: ${{ secrets.CONVOX_PASSWORD }}
+
+      - name: Install Convox CLI
+        run: |
+          curl -L https://github.com/convox/convox/releases/latest/download/convox-linux -o /tmp/convox
+          sudo mv /tmp/convox /usr/local/bin/convox
+          chmod +x /usr/local/bin/convox
+
+      - name: Deploy with feature branch
+        uses: convox/action-deploy@actions-update-092526
+        with:
+          rack: ${{ secrets.CONVOX_RACK }}
+          app: ${{ env.APP }}
+          password: ${{ secrets.CONVOX_PASSWORD }}
+          host: ${{ secrets.CONVOX_HOST }}
+
+      - name: Verify deployment
+        run: |
+          convox apps info --app ${{ env.APP }} --rack ${{ secrets.CONVOX_RACK }}
+          convox services --app ${{ env.APP }} --rack ${{ secrets.CONVOX_RACK }}
+          echo "Deploy completed successfully"
+
+  #  PHASE 3: action-promote — build a new release, promote it with the action
+  test-promote:
+    name: "Promote: New Release"
+    runs-on: ubuntu-latest
+    needs: [test-deploy]
+    outputs:
+      release_id: ${{ steps.build.outputs.release }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: convox/action-login@v2.1.0
+        with:
+          host: ${{ secrets.CONVOX_HOST }}
+          password: ${{ secrets.CONVOX_PASSWORD }}
+
+      - name: Install Convox CLI
+        run: |
+          curl -L https://github.com/convox/convox/releases/latest/download/convox-linux -o /tmp/convox
+          sudo mv /tmp/convox /usr/local/bin/convox
+          chmod +x /usr/local/bin/convox
+
+      - name: Build a new release
+        id: build
+        uses: convox/action-build@v2.4.0
+        with:
+          rack: ${{ secrets.CONVOX_RACK }}
+          app: ${{ env.APP }}
+
+      - name: Promote with feature branch
+        uses: convox/action-promote@actions-update-092526
+        with:
+          rack: ${{ secrets.CONVOX_RACK }}
+          app: ${{ env.APP }}
+          release: ${{ steps.build.outputs.release }}
+
+      - name: Verify release is active
+        run: |
+          current=$(convox apps info --app ${{ env.APP }} --rack ${{ secrets.CONVOX_RACK }} | awk '/^Release/ {print $2}')
+          echo "Active release: $current"
+          if [ "$current" != "${{ steps.build.outputs.release }}" ]; then
+            echo "::error::Expected active release ${{ steps.build.outputs.release }}, got '$current'"
+            exit 1
+          fi
+          echo "Promote complete"
+
+  test-promote-validation:
+    name: "Promote: Validates Missing Release"
+    runs-on: ubuntu-latest
+    needs: [test-deploy]
+    steps:
+      - uses: convox/action-login@v2.1.0
+        with:
+          host: ${{ secrets.CONVOX_HOST }}
+          password: ${{ secrets.CONVOX_PASSWORD }}
+
+      - name: Promote without release or prior build (should fail fast)
+        id: no_release
+        continue-on-error: true
+        uses: convox/action-promote@actions-update-092526
+        with:
+          rack: ${{ secrets.CONVOX_RACK }}
+          app: ${{ env.APP }}
+
+      - name: Verify validation error
+        run: |
+          if [ "${{ steps.no_release.outcome }}" != "failure" ]; then
+            echo "::error::Should have failed — no release given"
+            exit 1
+          fi
+          echo "Missing release correctly caught"
+
+  #  PHASE 4: action-run — all tests run against the promoted release
+  test-run-tty:
+    name: "Run: TTY Output"
+    runs-on: ubuntu-latest
+    needs: [test-promote]
+    steps:
+      - uses: convox/action-login@v2.1.0
+        with:
+          host: ${{ secrets.CONVOX_HOST }}
+          password: ${{ secrets.CONVOX_PASSWORD }}
+
+      - name: Run TTY detection test
+        uses: convox/action-run@actions-update-092526
+        with:
+          rack: ${{ secrets.CONVOX_RACK }}
+          app: ${{ env.APP }}
+          service: web
+          command: "node src/test-tty.js"
+
+  test-run-no-hang:
+    name: "Run: No Hang (Long Output)"
+    runs-on: ubuntu-latest
+    needs: [test-promote]
+    timeout-minutes: 5
+    steps:
+      - uses: convox/action-login@v2.1.0
+        with:
+          host: ${{ secrets.CONVOX_HOST }}
+          password: ${{ secrets.CONVOX_PASSWORD }}
+
+      - name: Run long output test (old action hangs here)
+        uses: convox/action-run@actions-update-092526
+        with:
+          rack: ${{ secrets.CONVOX_RACK }}
+          app: ${{ env.APP }}
+          service: web
+          command: "node src/test-long-output.js"
+
+  test-run-exit-success:
+    name: "Run: Exit Code 0"
+    runs-on: ubuntu-latest
+    needs: [test-promote]
+    steps:
+      - uses: convox/action-login@v2.1.0
+        with:
+          host: ${{ secrets.CONVOX_HOST }}
+          password: ${{ secrets.CONVOX_PASSWORD }}
+
+      - name: Run command that succeeds
+        uses: convox/action-run@actions-update-092526
+        with:
+          rack: ${{ secrets.CONVOX_RACK }}
+          app: ${{ env.APP }}
+          service: web
+          command: "node src/test-exit-codes.js 0"
+
+  test-run-exit-failure:
+    name: "Run: Exit Code 1 Propagates"
+    runs-on: ubuntu-latest
+    needs: [test-promote]
+    steps:
+      - uses: convox/action-login@v2.1.0
+        with:
+          host: ${{ secrets.CONVOX_HOST }}
+          password: ${{ secrets.CONVOX_PASSWORD }}
+
+      - name: Run command that fails (expect failure)
+        id: should_fail
+        continue-on-error: true
+        uses: convox/action-run@actions-update-092526
+        with:
+          rack: ${{ secrets.CONVOX_RACK }}
+          app: ${{ env.APP }}
+          service: web
+          command: "node src/test-exit-codes.js 1"
+
+      - name: Verify step actually failed
+        run: |
+          if [ "${{ steps.should_fail.outcome }}" != "failure" ]; then
+            echo "::error::Expected failure but got '${{ steps.should_fail.outcome }}'"
+            exit 1
+          fi
+          echo "Exit code 1 correctly propagated"
+
+  test-run-exit-custom:
+    name: "Run: Exit Code 42 Propagates"
+    runs-on: ubuntu-latest
+    needs: [test-promote]
+    steps:
+      - uses: convox/action-login@v2.1.0
+        with:
+          host: ${{ secrets.CONVOX_HOST }}
+          password: ${{ secrets.CONVOX_PASSWORD }}
+
+      - name: Run command that exits 42
+        id: should_fail_42
+        continue-on-error: true
+        uses: convox/action-run@actions-update-092526
+        with:
+          rack: ${{ secrets.CONVOX_RACK }}
+          app: ${{ env.APP }}
+          service: web
+          command: "node src/test-exit-codes.js 42"
+
+      - name: Verify failure
+        run: |
+          if [ "${{ steps.should_fail_42.outcome }}" != "failure" ]; then
+            echo "::error::Expected failure for exit code 42"
+            exit 1
+          fi
+          echo "Custom exit code 42 correctly propagated"
+
+  test-run-validation-no-app:
+    name: "Run: Validates Missing App"
+    runs-on: ubuntu-latest
+    needs: [test-promote]
+    steps:
+      - uses: convox/action-login@v2.1.0
+        with:
+          host: ${{ secrets.CONVOX_HOST }}
+          password: ${{ secrets.CONVOX_PASSWORD }}
+
+      - name: Run without app (should fail fast)
+        id: no_app
+        continue-on-error: true
+        uses: convox/action-run@actions-update-092526
+        with:
+          rack: ${{ secrets.CONVOX_RACK }}
+          service: web
+          command: "echo should not run"
+
+      - name: Verify validation error
+        run: |
+          if [ "${{ steps.no_app.outcome }}" != "failure" ]; then
+            echo "::error::Should have failed — missing 'app' input"
+            exit 1
+          fi
+          echo "Missing 'app' input correctly caught"
+
+  test-run-validation-no-service:
+    name: "Run: Validates Missing Service"
+    runs-on: ubuntu-latest
+    needs: [test-promote]
+    steps:
+      - uses: convox/action-login@v2.1.0
+        with:
+          host: ${{ secrets.CONVOX_HOST }}
+          password: ${{ secrets.CONVOX_PASSWORD }}
+
+      - name: Run without service
+        id: no_svc
+        continue-on-error: true
+        uses: convox/action-run@actions-update-092526
+        with:
+          rack: ${{ secrets.CONVOX_RACK }}
+          app: ${{ env.APP }}
+          command: "echo should not run"
+
+      - name: Verify validation error
+        run: |
+          if [ "${{ steps.no_svc.outcome }}" != "failure" ]; then
+            echo "::error::Should have failed — missing 'service' input"
+            exit 1
+          fi
+          echo "Missing 'service' input correctly caught"
+
+  test-run-validation-no-command:
+    name: "Run: Validates Missing Command"
+    runs-on: ubuntu-latest
+    needs: [test-promote]
+    steps:
+      - uses: convox/action-login@v2.1.0
+        with:
+          host: ${{ secrets.CONVOX_HOST }}
+          password: ${{ secrets.CONVOX_PASSWORD }}
+
+      - name: Run without command
+        id: no_cmd
+        continue-on-error: true
+        uses: convox/action-run@actions-update-092526
+        with:
+          rack: ${{ secrets.CONVOX_RACK }}
+          app: ${{ env.APP }}
+          service: web
+
+      - name: Verify validation error
+        run: |
+          if [ "${{ steps.no_cmd.outcome }}" != "failure" ]; then
+            echo "::error::Should have failed — missing 'command' input"
+            exit 1
+          fi
+          echo "Missing 'command' input correctly caught"
+
+  test-run-with-release:
+    name: "Run: With Specific Release"
+    runs-on: ubuntu-latest
+    needs: [test-promote]
+    steps:
+      - uses: convox/action-login@v2.1.0
+        with:
+          host: ${{ secrets.CONVOX_HOST }}
+          password: ${{ secrets.CONVOX_PASSWORD }}
+
+      - name: Run with release from build step
+        uses: convox/action-run@actions-update-092526
+        with:
+          rack: ${{ secrets.CONVOX_RACK }}
+          app: ${{ env.APP }}
+          service: web
+          command: "node src/test-env.js"
+          release: ${{ needs.test-promote.outputs.release_id }}
+
+  test-run-migration:
+    name: "Run: Simulated db:migrate"
+    runs-on: ubuntu-latest
+    needs: [test-promote]
+    steps:
+      - uses: convox/action-login@v2.1.0
+        with:
+          host: ${{ secrets.CONVOX_HOST }}
+          password: ${{ secrets.CONVOX_PASSWORD }}
+
+      - name: Run migration
+        uses: convox/action-run@actions-update-092526
+        with:
+          rack: ${{ secrets.CONVOX_RACK }}
+          app: ${{ env.APP }}
+          service: web
+          command: "node src/migrate.js"
+
+  #  PHASE 4b: action-run — wait / detach / timeout / retain (V3 rack 3.25.5+)
+
+  test-run-wait-success:
+    name: "Run: Wait Mode Exit 0 + PID Output"
+    runs-on: ubuntu-latest
+    needs: [test-promote]
+    steps:
+      - uses: convox/action-login@v2.1.0
+        with:
+          host: ${{ secrets.CONVOX_HOST }}
+          password: ${{ secrets.CONVOX_PASSWORD }}
+
+      - name: Run with wait
+        id: run
+        uses: convox/action-run@actions-update-092526
+        with:
+          rack: ${{ secrets.CONVOX_RACK }}
+          app: ${{ env.APP }}
+          service: web
+          command: "node src/test-exit-codes.js 0"
+          wait: true
+
+      - name: Verify pid output
+        run: |
+          if [ -z "${{ steps.run.outputs.pid }}" ]; then
+            echo "::error::Expected 'pid' output in wait mode"
+            exit 1
+          fi
+          echo "Wait mode returned pid ${{ steps.run.outputs.pid }}"
+
+  test-run-wait-failure:
+    name: "Run: Wait Mode Exit 1 Propagates"
+    runs-on: ubuntu-latest
+    needs: [test-promote]
+    steps:
+      - uses: convox/action-login@v2.1.0
+        with:
+          host: ${{ secrets.CONVOX_HOST }}
+          password: ${{ secrets.CONVOX_PASSWORD }}
+
+      - name: Run failing command with wait (expect failure)
+        id: should_fail
+        continue-on-error: true
+        uses: convox/action-run@actions-update-092526
+        with:
+          rack: ${{ secrets.CONVOX_RACK }}
+          app: ${{ env.APP }}
+          service: web
+          command: "node src/test-exit-codes.js 1"
+          wait: true
+
+      - name: Verify step actually failed
+        run: |
+          if [ "${{ steps.should_fail.outcome }}" != "failure" ]; then
+            echo "::error::Expected failure but got '${{ steps.should_fail.outcome }}'"
+            exit 1
+          fi
+          echo "Exit code 1 correctly propagated in wait mode"
+
+  test-run-wait-timeout:
+    name: "Run: Wait Mode Timeout"
+    runs-on: ubuntu-latest
+    needs: [test-promote]
+    timeout-minutes: 5
+    steps:
+      - uses: convox/action-login@v2.1.0
+        with:
+          host: ${{ secrets.CONVOX_HOST }}
+          password: ${{ secrets.CONVOX_PASSWORD }}
+
+      - name: Run long command with short timeout (expect failure)
+        id: should_timeout
+        continue-on-error: true
+        uses: convox/action-run@actions-update-092526
+        with:
+          rack: ${{ secrets.CONVOX_RACK }}
+          app: ${{ env.APP }}
+          service: web
+          command: "sleep 120"
+          wait: true
+          timeout: 15
+
+      - name: Verify timeout failed the step
+        run: |
+          if [ "${{ steps.should_timeout.outcome }}" != "failure" ]; then
+            echo "::error::Expected timeout failure but got '${{ steps.should_timeout.outcome }}'"
+            exit 1
+          fi
+          echo "Timeout correctly enforced"
+
+  test-run-wait-retain:
+    name: "Run: Wait + Retain Keeps Process Readable"
+    runs-on: ubuntu-latest
+    needs: [test-promote]
+    steps:
+      - uses: convox/action-login@v2.1.0
+        with:
+          host: ${{ secrets.CONVOX_HOST }}
+          password: ${{ secrets.CONVOX_PASSWORD }}
+
+      - name: Install Convox CLI
+        run: |
+          curl -L https://github.com/convox/convox/releases/latest/download/convox-linux -o /tmp/convox
+          sudo mv /tmp/convox /usr/local/bin/convox
+          chmod +x /usr/local/bin/convox
+
+      - name: Run with wait and retain
+        id: run
+        uses: convox/action-run@actions-update-092526
+        with:
+          rack: ${{ secrets.CONVOX_RACK }}
+          app: ${{ env.APP }}
+          service: web
+          command: "node src/test-env.js"
+          wait: true
+          retain: 600
+
+      - name: Verify finished process is still readable
+        run: |
+          pid="${{ steps.run.outputs.pid }}"
+          if [ -z "$pid" ]; then
+            echo "::error::Expected 'pid' output"
+            exit 1
+          fi
+          convox ps info "$pid" --app ${{ env.APP }} --rack ${{ secrets.CONVOX_RACK }}
+          echo "Retained process $pid is readable"
+
+  test-run-detach:
+    name: "Run: Detach Returns PID"
+    runs-on: ubuntu-latest
+    needs: [test-promote]
+    steps:
+      - uses: convox/action-login@v2.1.0
+        with:
+          host: ${{ secrets.CONVOX_HOST }}
+          password: ${{ secrets.CONVOX_PASSWORD }}
+
+      - name: Install Convox CLI
+        run: |
+          curl -L https://github.com/convox/convox/releases/latest/download/convox-linux -o /tmp/convox
+          sudo mv /tmp/convox /usr/local/bin/convox
+          chmod +x /usr/local/bin/convox
+
+      - name: Run detached
+        id: run
+        uses: convox/action-run@actions-update-092526
+        with:
+          rack: ${{ secrets.CONVOX_RACK }}
+          app: ${{ env.APP }}
+          service: web
+          command: "node src/test-env.js"
+          detach: true
+          retain: 600
+
+      - name: Verify pid and process info
+        run: |
+          pid="${{ steps.run.outputs.pid }}"
+          if [ -z "$pid" ]; then
+            echo "::error::Expected 'pid' output in detach mode"
+            exit 1
+          fi
+          convox ps info "$pid" --app ${{ env.APP }} --rack ${{ secrets.CONVOX_RACK }}
+          echo "Detached process $pid started"
+
+  test-run-validation-new-inputs:
+    name: "Run: Validates wait/timeout/retain Inputs"
+    runs-on: ubuntu-latest
+    needs: [test-promote]
+    steps:
+      - uses: convox/action-login@v2.1.0
+        with:
+          host: ${{ secrets.CONVOX_HOST }}
+          password: ${{ secrets.CONVOX_PASSWORD }}
+
+      - name: Invalid timeout (should fail fast)
+        id: bad_timeout
+        continue-on-error: true
+        uses: convox/action-run@actions-update-092526
+        with:
+          rack: ${{ secrets.CONVOX_RACK }}
+          app: ${{ env.APP }}
+          service: web
+          command: "echo should not run"
+          timeout: abc
+
+      - name: Invalid wait value (should fail fast)
+        id: bad_wait
+        continue-on-error: true
+        uses: convox/action-run@actions-update-092526
+        with:
+          rack: ${{ secrets.CONVOX_RACK }}
+          app: ${{ env.APP }}
+          service: web
+          command: "echo should not run"
+          wait: "maybe"
+
+      - name: Retain without wait or detach (should fail fast)
+        id: bad_retain
+        continue-on-error: true
+        uses: convox/action-run@actions-update-092526
+        with:
+          rack: ${{ secrets.CONVOX_RACK }}
+          app: ${{ env.APP }}
+          service: web
+          command: "echo should not run"
+          retain: 600
+
+      - name: Verify validation errors
+        run: |
+          failed=0
+          for pair in "timeout:${{ steps.bad_timeout.outcome }}" "wait:${{ steps.bad_wait.outcome }}" "retain:${{ steps.bad_retain.outcome }}"; do
+            name="${pair%%:*}"; outcome="${pair#*:}"
+            if [ "$outcome" != "failure" ]; then
+              echo "::error::Invalid '$name' input should have failed, got '$outcome'"
+              failed=1
+            else
+              echo "Invalid '$name' input correctly caught"
+            fi
+          done
+          exit $failed
+
+  #  CLEANUP — always delete the test app
+  cleanup:
+    name: "Cleanup: Delete Test App"
+    runs-on: ubuntu-latest
+    needs:
+      - setup
+      - test-deploy
+      - test-promote
+      - test-promote-validation
+      - test-run-tty
+      - test-run-no-hang
+      - test-run-exit-success
+      - test-run-exit-failure
+      - test-run-exit-custom
+      - test-run-validation-no-app
+      - test-run-validation-no-service
+      - test-run-validation-no-command
+      - test-run-with-release
+      - test-run-migration
+      - test-run-wait-success
+      - test-run-wait-failure
+      - test-run-wait-timeout
+      - test-run-wait-retain
+      - test-run-detach
+      - test-run-validation-new-inputs
+    if: always()
+    steps:
+      - uses: convox/action-login@v2.1.0
+        with:
+          host: ${{ secrets.CONVOX_HOST }}
+          password: ${{ secrets.CONVOX_PASSWORD }}
+
+      - name: Install Convox CLI
+        run: |
+          curl -L https://github.com/convox/convox/releases/latest/download/convox-linux -o /tmp/convox
+          sudo mv /tmp/convox /usr/local/bin/convox
+          chmod +x /usr/local/bin/convox
+
+      - name: Delete test app
+        run: |
+          if convox apps info --app ${{ env.APP }} --rack ${{ secrets.CONVOX_RACK }} >/dev/null 2>&1; then
+            echo "Deleting ${{ env.APP }}..."
+            convox apps delete ${{ env.APP }} --rack ${{ secrets.CONVOX_RACK }} --wait
+            echo "Test app deleted"
+          else
+            echo "Test app ${{ env.APP }} not found — nothing to clean up"
+          fi
+
+  #  SUMMARY
+  summary:
+    name: "Test Summary"
+    runs-on: ubuntu-latest
+    needs:
+      - setup
+      - test-deploy
+      - test-promote
+      - test-promote-validation
+      - test-run-tty
+      - test-run-no-hang
+      - test-run-exit-success
+      - test-run-exit-failure
+      - test-run-exit-custom
+      - test-run-validation-no-app
+      - test-run-validation-no-service
+      - test-run-validation-no-command
+      - test-run-with-release
+      - test-run-migration
+      - test-run-wait-success
+      - test-run-wait-failure
+      - test-run-wait-timeout
+      - test-run-wait-retain
+      - test-run-detach
+      - test-run-validation-new-inputs
+      - cleanup
+    if: always()
+    steps:
+      - name: Generate summary
+        run: |
+          cat >> $GITHUB_STEP_SUMMARY << 'EOF'
+          ## Convox PR Actions Test Results
+
+          **Branch:** `actions-update-092526` · **App:** `${{ env.APP }}`
+
+          | Step | Status |
+          |------|--------|
+          | Setup: Create App | ${{ needs.setup.result }} |
+          | Cleanup: Delete App | ${{ needs.cleanup.result }} |
+
+          #### action-deploy
+          | Test | Status |
+          |------|--------|
+          | Build + Promote | ${{ needs.test-deploy.result }} |
+
+          #### action-promote
+          | Test | Status |
+          |------|--------|
+          | Promote New Release | ${{ needs.test-promote.result }} |
+          | Validation: Missing Release | ${{ needs.test-promote-validation.result }} |
+
+          #### action-run
+          | Test | Status |
+          |------|--------|
+          | TTY Output | ${{ needs.test-run-tty.result }} |
+          | No Hang (Long Output) | ${{ needs.test-run-no-hang.result }} |
+          | Exit Code 0 | ${{ needs.test-run-exit-success.result }} |
+          | Exit Code 1 Propagation | ${{ needs.test-run-exit-failure.result }} |
+          | Exit Code 42 Custom | ${{ needs.test-run-exit-custom.result }} |
+          | Validation: Missing App | ${{ needs.test-run-validation-no-app.result }} |
+          | Validation: Missing Service | ${{ needs.test-run-validation-no-service.result }} |
+          | Validation: Missing Command | ${{ needs.test-run-validation-no-command.result }} |
+          | With Specific Release | ${{ needs.test-run-with-release.result }} |
+          | Simulated Migration | ${{ needs.test-run-migration.result }} |
+          | Wait: Exit 0 + PID | ${{ needs.test-run-wait-success.result }} |
+          | Wait: Exit 1 Propagation | ${{ needs.test-run-wait-failure.result }} |
+          | Wait: Timeout | ${{ needs.test-run-wait-timeout.result }} |
+          | Wait + Retain | ${{ needs.test-run-wait-retain.result }} |
+          | Detach: PID Output | ${{ needs.test-run-detach.result }} |
+          | Validation: wait/timeout/retain | ${{ needs.test-run-validation-new-inputs.result }} |
+          EOF
+
+      - name: Fail if any test failed
+        if: contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled')
+        run: |
+          echo "::error::One or more tests failed — check summary above"
+          exit 1
