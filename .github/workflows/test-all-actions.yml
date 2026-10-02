@@ -13,8 +13,8 @@ jobs:
     name: "Login: Authenticate"
     runs-on: ubuntu-latest
     steps:
-      - name: Login with feature branch
-        uses: convox/action-login@updates/tty-fix-and-cleanup
+      - name: Login with latest release
+        uses: convox/action-login@v2.1.0
         with:
           host: ${{ secrets.CONVOX_HOST }}
           password: ${{ secrets.CONVOX_PASSWORD }}
@@ -36,7 +36,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: [test-login]
     steps:
-      - uses: convox/action-login@updates/tty-fix-and-cleanup
+      - uses: convox/action-login@v2.1.0
         with:
           host: ${{ secrets.CONVOX_HOST }}
           password: ${{ secrets.CONVOX_PASSWORD }}
@@ -51,8 +51,8 @@ jobs:
         continue-on-error: true
         run: convox apps delete ${{ env.APP_LIFECYCLE }} --rack ${{ secrets.CONVOX_RACK }} --wait
 
-      - name: Create app with feature branch
-        uses: convox/action-create@updates/tty-fix-and-cleanup
+      - name: Create app with latest release
+        uses: convox/action-create@v1.0.0
         with:
           rack: ${{ secrets.CONVOX_RACK }}
           app: ${{ env.APP_LIFECYCLE }}
@@ -73,7 +73,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: convox/action-login@updates/tty-fix-and-cleanup
+      - uses: convox/action-login@v2.1.0
         with:
           host: ${{ secrets.CONVOX_HOST }}
           password: ${{ secrets.CONVOX_PASSWORD }}
@@ -84,9 +84,9 @@ jobs:
           sudo mv /tmp/convox /usr/local/bin/convox
           chmod +x /usr/local/bin/convox
 
-      - name: Build with feature branch
+      - name: Build with latest release
         id: build
-        uses: convox/action-build@updates/tty-fix-and-cleanup
+        uses: convox/action-build@v2.4.0
         with:
           rack: ${{ secrets.CONVOX_RACK }}
           app: ${{ env.APP_PRIMARY }}
@@ -116,7 +116,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: [test-build]
     steps:
-      - uses: convox/action-login@updates/tty-fix-and-cleanup
+      - uses: convox/action-login@v2.1.0
         with:
           host: ${{ secrets.CONVOX_HOST }}
           password: ${{ secrets.CONVOX_PASSWORD }}
@@ -135,7 +135,7 @@ jobs:
     needs: [test-build]
     timeout-minutes: 5
     steps:
-      - uses: convox/action-login@updates/tty-fix-and-cleanup
+      - uses: convox/action-login@v2.1.0
         with:
           host: ${{ secrets.CONVOX_HOST }}
           password: ${{ secrets.CONVOX_PASSWORD }}
@@ -153,7 +153,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: [test-build]
     steps:
-      - uses: convox/action-login@updates/tty-fix-and-cleanup
+      - uses: convox/action-login@v2.1.0
         with:
           host: ${{ secrets.CONVOX_HOST }}
           password: ${{ secrets.CONVOX_PASSWORD }}
@@ -171,7 +171,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: [test-build]
     steps:
-      - uses: convox/action-login@updates/tty-fix-and-cleanup
+      - uses: convox/action-login@v2.1.0
         with:
           host: ${{ secrets.CONVOX_HOST }}
           password: ${{ secrets.CONVOX_PASSWORD }}
@@ -199,7 +199,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: [test-build]
     steps:
-      - uses: convox/action-login@updates/tty-fix-and-cleanup
+      - uses: convox/action-login@v2.1.0
         with:
           host: ${{ secrets.CONVOX_HOST }}
           password: ${{ secrets.CONVOX_PASSWORD }}
@@ -227,7 +227,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: [test-build]
     steps:
-      - uses: convox/action-login@updates/tty-fix-and-cleanup
+      - uses: convox/action-login@v2.1.0
         with:
           host: ${{ secrets.CONVOX_HOST }}
           password: ${{ secrets.CONVOX_PASSWORD }}
@@ -254,7 +254,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: [test-build]
     steps:
-      - uses: convox/action-login@updates/tty-fix-and-cleanup
+      - uses: convox/action-login@v2.1.0
         with:
           host: ${{ secrets.CONVOX_HOST }}
           password: ${{ secrets.CONVOX_PASSWORD }}
@@ -281,7 +281,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: [test-build]
     steps:
-      - uses: convox/action-login@updates/tty-fix-and-cleanup
+      - uses: convox/action-login@v2.1.0
         with:
           host: ${{ secrets.CONVOX_HOST }}
           password: ${{ secrets.CONVOX_PASSWORD }}
@@ -308,7 +308,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: [test-build]
     steps:
-      - uses: convox/action-login@updates/tty-fix-and-cleanup
+      - uses: convox/action-login@v2.1.0
         with:
           host: ${{ secrets.CONVOX_HOST }}
           password: ${{ secrets.CONVOX_PASSWORD }}
@@ -327,7 +327,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: [test-build]
     steps:
-      - uses: convox/action-login@updates/tty-fix-and-cleanup
+      - uses: convox/action-login@v2.1.0
         with:
           host: ${{ secrets.CONVOX_HOST }}
           password: ${{ secrets.CONVOX_PASSWORD }}
@@ -347,7 +347,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: [test-build]
     steps:
-      - uses: convox/action-login@updates/tty-fix-and-cleanup
+      - uses: convox/action-login@v2.1.0
         with:
           host: ${{ secrets.CONVOX_HOST }}
           password: ${{ secrets.CONVOX_PASSWORD }}
@@ -375,7 +375,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: [test-build]
     steps:
-      - uses: convox/action-login@updates/tty-fix-and-cleanup
+      - uses: convox/action-login@v2.1.0
         with:
           host: ${{ secrets.CONVOX_HOST }}
           password: ${{ secrets.CONVOX_PASSWORD }}
@@ -405,7 +405,7 @@ jobs:
     needs: [test-build]
     timeout-minutes: 5
     steps:
-      - uses: convox/action-login@updates/tty-fix-and-cleanup
+      - uses: convox/action-login@v2.1.0
         with:
           host: ${{ secrets.CONVOX_HOST }}
           password: ${{ secrets.CONVOX_PASSWORD }}
@@ -435,7 +435,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: [test-build]
     steps:
-      - uses: convox/action-login@updates/tty-fix-and-cleanup
+      - uses: convox/action-login@v2.1.0
         with:
           host: ${{ secrets.CONVOX_HOST }}
           password: ${{ secrets.CONVOX_PASSWORD }}
@@ -472,7 +472,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: [test-build]
     steps:
-      - uses: convox/action-login@updates/tty-fix-and-cleanup
+      - uses: convox/action-login@v2.1.0
         with:
           host: ${{ secrets.CONVOX_HOST }}
           password: ${{ secrets.CONVOX_PASSWORD }}
@@ -509,7 +509,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: [test-build]
     steps:
-      - uses: convox/action-login@updates/tty-fix-and-cleanup
+      - uses: convox/action-login@v2.1.0
         with:
           host: ${{ secrets.CONVOX_HOST }}
           password: ${{ secrets.CONVOX_PASSWORD }}
@@ -567,13 +567,13 @@ jobs:
     runs-on: ubuntu-latest
     needs: [test-build]
     steps:
-      - uses: convox/action-login@updates/tty-fix-and-cleanup
+      - uses: convox/action-login@v2.1.0
         with:
           host: ${{ secrets.CONVOX_HOST }}
           password: ${{ secrets.CONVOX_PASSWORD }}
 
       - name: Exec into container
-        uses: convox/action-exec@updates/tty-fix-and-cleanup
+        uses: convox/action-exec@v1.1.0
         with:
           rack: ${{ secrets.CONVOX_RACK }}
           app: ${{ env.APP_PRIMARY }}
@@ -588,7 +588,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: convox/action-login@updates/tty-fix-and-cleanup
+      - uses: convox/action-login@v2.1.0
         with:
           host: ${{ secrets.CONVOX_HOST }}
           password: ${{ secrets.CONVOX_PASSWORD }}
@@ -621,7 +621,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: [test-create, test-deploy]
     steps:
-      - uses: convox/action-login@updates/tty-fix-and-cleanup
+      - uses: convox/action-login@v2.1.0
         with:
           host: ${{ secrets.CONVOX_HOST }}
           password: ${{ secrets.CONVOX_PASSWORD }}
@@ -633,7 +633,7 @@ jobs:
           chmod +x /usr/local/bin/convox
 
       - name: Destroy lifecycle test app
-        uses: convox/action-destroy@updates/tty-fix-and-cleanup
+        uses: convox/action-destroy@v1.0.0
         with:
           rack: ${{ secrets.CONVOX_RACK }}
           app: ${{ env.APP_LIFECYCLE }}
@@ -673,7 +673,7 @@ jobs:
       - test-exec
     if: always()
     steps:
-      - uses: convox/action-login@v2
+      - uses: convox/action-login@v2.1.0
         with:
           host: ${{ secrets.CONVOX_HOST }}
           password: ${{ secrets.CONVOX_PASSWORD }}
@@ -726,7 +726,7 @@ jobs:
           cat >> $GITHUB_STEP_SUMMARY << 'EOF'
           ## Convox Actions Test Results
 
-          **Branches:** `actions-update-092526` (run, deploy, promote) · `updates/tty-fix-and-cleanup` (others)
+          **Branches:** `actions-update-092526` (run, deploy, promote) · latest releases (others)
 
           #### action-login
           | Test | Status |
